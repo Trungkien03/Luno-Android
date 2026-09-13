@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.luno.ui.theme.LunoTheme
-import com.luno.feature.chat.ui.ZaloMainScreen
+import com.luno.feature.chat.ZaloMainScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

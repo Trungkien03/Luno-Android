@@ -1,4 +1,4 @@
-package com.luno.feature.chat.ui
+package com.luno.feature.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
