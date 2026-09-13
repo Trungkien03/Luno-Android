@@ -1,0 +1,33 @@
+# Built outputs (Dành cho multi-module: chặn build ở root và tất cả module con)
+build/
+**/build/
+
+# Gradle cache & generated files
+.gradle/
+**/gradle-app.setting
+!gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio & IntelliJ (Bỏ qua toàn bộ .idea để tránh xung đột config cá nhân)
+.idea/
+*.iml
+**/*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local configuration (Tuyệt đối không push)
+local.properties
+.DS_Store
+Thumbs.db
+
+# Security & Credentials
+*.jks
+*.keystore
+secrets.properties
+google-services.json
+
+# Temporary & Log files
+*.log
+*.tmp
