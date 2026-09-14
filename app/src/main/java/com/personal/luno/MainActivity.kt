@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.luno.ui.theme.LunoTheme
-import com.luno.feature.chat.ZaloMainScreen
+import com.example.luno.ui.LunoApp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LunoTheme {
-                ZaloMainScreen()
+                LunoApp()
             }
         }
     }
@@ -25,6 +25,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LunoAppPreview() {
     LunoTheme {
-        ZaloMainScreen()
+        LunoApp()
     }
 }
