@@ -28,6 +28,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.luno.core.auth.navigation.LoginRoute
+import com.luno.core.auth.navigation.authGraph
 import com.luno.feature.chat.ChatViewModel
 import com.luno.feature.chat.navigation.ChatDetailRoute
 import com.luno.feature.chat.navigation.ChatsRoute
@@ -57,7 +59,7 @@ fun LunoApp(
         it.route == "Contacts" || 
         it.route == "Discover" || 
         it.route == "Profile"
-    } == true || currentDestination == null
+    } == true
 
     Scaffold(
         bottomBar = {
@@ -107,9 +109,17 @@ fun LunoApp(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = ChatsRoute,
+            startDestination = LoginRoute,
             modifier = Modifier.padding(paddingValues)
         ) {
+            authGraph(
+                onLoginSuccess = {
+                    navController.navigate(ChatsRoute) {
+                        popUpTo(LoginRoute) { inclusive = true }
+                    }
+                }
+            )
+
             chatGraph(
                 viewModel = chatViewModel,
                 onNavigateToDetail = { convId ->
