@@ -19,25 +19,23 @@ data class ChatDetailRoute(val conversationId: String)
 fun NavGraphBuilder.chatGraph(
     viewModel: ChatViewModel,
     onNavigateToDetail: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     composable<ChatsRoute> {
         val conversations by viewModel.conversations.collectAsState()
         ChatListScreen(
             conversations = conversations,
-            onConversationClick = { convId ->
-                onNavigateToDetail(convId)
-            }
+            onConversationClick = { convId -> onNavigateToDetail(convId) }
         )
     }
     composable<ChatDetailRoute> { backStackEntry ->
         val args = backStackEntry.toRoute<ChatDetailRoute>()
         val conversation = viewModel.getConversation(args.conversationId)
         val messages by viewModel.currentMessages.collectAsState()
-        
-        if (conversation != null) {
+
+        conversation?.let {
             ChatDetailScreen(
-                conversation = conversation,
+                conversation = it,
                 messages = messages,
                 onBackClick = onBack,
                 onSendMessage = { text -> viewModel.sendMessage(text) }

@@ -34,7 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel = viewModel(),
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: () -> Unit,
 ) {
     val authState by viewModel.authState.collectAsState()
     val context = LocalContext.current
@@ -51,7 +51,7 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

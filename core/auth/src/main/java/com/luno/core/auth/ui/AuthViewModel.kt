@@ -27,7 +27,7 @@ class AuthViewModel : ViewModel() {
 
     // Bạn cần thay thế chuỗi này bằng chuỗi lấy từ google-services.json hoặc file config
     // Ví dụ: BuildConfig.WEB_CLIENT_ID
-    private val WEB_CLIENT_ID = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+    private val webClientId = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
 
     fun signInWithGoogle(context: Context) {
         viewModelScope.launch {
@@ -37,7 +37,7 @@ class AuthViewModel : ViewModel() {
 
                 val googleIdOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(WEB_CLIENT_ID)
+                    .setServerClientId(webClientId)
                     .setAutoSelectEnabled(false)
                     .build()
 
@@ -48,10 +48,11 @@ class AuthViewModel : ViewModel() {
                 val result = credentialManager.getCredential(context, request)
                 val credential = result.credential
 
-                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                if ((credential is CustomCredential) && (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)) {
                     val googleIdTokenCredential =
                         GoogleIdTokenCredential.createFrom(credential.data)
                     // Thành công: Lấy ID Token và gửi lên backend để verify
+                    @Suppress("unused")
                     val idToken = googleIdTokenCredential.idToken
                     val email = googleIdTokenCredential.id
 

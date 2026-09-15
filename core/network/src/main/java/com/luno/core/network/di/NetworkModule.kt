@@ -10,8 +10,9 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
-// Note: This is a placeholder for DI (like Hilt/Koin). 
+// Note: This is a placeholder for DI (like Hilt/Koin).
 // You can use this as a manual dependency provider or convert to Hilt/Koin module later.
+@Suppress("unused")
 object NetworkModule {
     private const val BASE_URL = "https://api.luno.example.com/" // Replace with actual backend URL
     private const val TIMEOUT = 30L

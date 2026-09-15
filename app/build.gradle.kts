@@ -58,8 +58,8 @@ dependencies {
     implementation(project(":core:auth"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:profile"))
-    implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 }

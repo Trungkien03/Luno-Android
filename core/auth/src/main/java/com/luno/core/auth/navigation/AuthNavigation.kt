@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 data object LoginRoute
 
 fun NavGraphBuilder.authGraph(
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: () -> Unit,
 ) {
     composable<LoginRoute> {
         LoginScreen(

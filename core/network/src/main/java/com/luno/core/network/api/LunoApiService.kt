@@ -6,9 +6,11 @@ import retrofit2.http.POST
 interface LunoApiService {
 
     // Placeholder for future endpoints
+    @Suppress("unused")
     @GET("v1/users/me")
     suspend fun getCurrentUser(): Any // Replace 'Any' with actual Response Model
 
+    @Suppress("unused")
     @POST("v1/auth/google")
     suspend fun verifyGoogleToken(): Any
 }

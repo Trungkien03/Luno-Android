@@ -47,18 +47,18 @@ val ZaloBlue = Color(0xFF0068FF)
 
 @Composable
 fun LunoApp(
-    chatViewModel: ChatViewModel = viewModel()
+    chatViewModel: ChatViewModel = viewModel(),
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     // Logic for hiding bottom bar in detail screens
-    val isBottomBarVisible = currentDestination?.hierarchy?.any { 
-        it.route == ChatsRoute::class.qualifiedName ||
-        it.route == "Contacts" || 
-        it.route == "Discover" || 
-        it.route == "Profile"
+    val isBottomBarVisible = currentDestination?.hierarchy?.any {
+        (it.route == ChatsRoute::class.qualifiedName) ||
+                (it.route == "Contacts") ||
+                (it.route == "Discover") ||
+                (it.route == "Profile")
     } == true
 
     Scaffold(
@@ -70,8 +70,8 @@ fun LunoApp(
                 ) {
                     TopLevelTab.entries.forEach { tab ->
                         val isSelected = when (tab) {
-                            TopLevelTab.Chats -> currentDestination?.hierarchy?.any { it.route == ChatsRoute::class.qualifiedName } == true
-                            else -> currentDestination?.hierarchy?.any { it.route == tab.name } == true
+                            TopLevelTab.Chats -> currentDestination.hierarchy.any { it.route == ChatsRoute::class.qualifiedName }
+                            else -> currentDestination.hierarchy.any { it.route == tab.name }
                         }
                         
                         NavigationBarItem(
@@ -112,13 +112,11 @@ fun LunoApp(
             startDestination = LoginRoute,
             modifier = Modifier.padding(paddingValues)
         ) {
-            authGraph(
-                onLoginSuccess = {
-                    navController.navigate(ChatsRoute) {
-                        popUpTo(LoginRoute) { inclusive = true }
-                    }
+            authGraph {
+                navController.navigate(ChatsRoute) {
+                    popUpTo(LoginRoute) { inclusive = true }
                 }
-            )
+            }
 
             chatGraph(
                 viewModel = chatViewModel,
