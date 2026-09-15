@@ -46,4 +46,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(project(":core:model"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:network"))
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.gotrue.kt)
 }

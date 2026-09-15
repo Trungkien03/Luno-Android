@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.luno"
+    namespace = "com.kane.luno"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.luno"
+        applicationId = "com.kane.luno"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -56,6 +56,9 @@ dependencies {
 
     implementation(project(":core:model"))
     implementation(project(":core:auth"))
+    implementation(project(":core:data"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:network"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:profile"))
     implementation(libs.coil.compose)

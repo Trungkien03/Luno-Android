@@ -1,4 +1,4 @@
-package com.example.luno.ui.theme
+package com.kane.luno.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

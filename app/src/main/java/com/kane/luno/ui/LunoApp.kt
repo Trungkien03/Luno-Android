@@ -1,4 +1,4 @@
-package com.example.luno.ui
+package com.kane.luno.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -28,8 +30,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.kane.luno.di.AppModule
 import com.luno.core.auth.navigation.LoginRoute
 import com.luno.core.auth.navigation.authGraph
+import com.luno.core.auth.ui.AuthViewModel
 import com.luno.feature.chat.ChatViewModel
 import com.luno.feature.chat.navigation.ChatDetailRoute
 import com.luno.feature.chat.navigation.ChatsRoute
@@ -49,6 +53,15 @@ val ZaloBlue = Color(0xFF0068FF)
 fun LunoApp(
     chatViewModel: ChatViewModel = viewModel(),
 ) {
+    val authViewModel: AuthViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return AuthViewModel(AppModule.authRepository) as T
+            }
+        }
+    )
+
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -112,11 +125,14 @@ fun LunoApp(
             startDestination = LoginRoute,
             modifier = Modifier.padding(paddingValues)
         ) {
-            authGraph {
-                navController.navigate(ChatsRoute) {
-                    popUpTo(LoginRoute) { inclusive = true }
+            authGraph(
+                authViewModel = authViewModel,
+                onLoginSuccess = {
+                    navController.navigate(ChatsRoute) {
+                        popUpTo(LoginRoute) { inclusive = true }
+                    }
                 }
-            }
+            )
 
             chatGraph(
                 viewModel = chatViewModel,
