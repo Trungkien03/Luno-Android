@@ -10,3 +10,49 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+# Giữ lại toàn bộ data class / DTO dùng để parse JSON qua Reflection / Codegen
+-keepclassmembers class com.luno.core.model.** { *; }
+-keepclassmembers class com.luno.core.network.model.** { *; }
+
+# Quy tắc cho Kotlinx Serialization
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.**
+-keepclassmembers class * {
+    @kotlinx.serialization.SerialName <fields>;
+    @kotlinx.serialization.Serializable <fields>;
+}
+-keepclassmembers class * extends kotlinx.serialization.internal.GeneratedSerializer {
+    <fields>;
+    <methods>;
+}
+
+
+# Retrofit & OkHttp
+-dontwarn okio.**
+-dontwarn retrofit2.**
+-keepattributes Signature
+-keepattributes Exceptions
+-keepclasseswithmembers class * {
+    @retrofit2.http.* <methods>;
+}
+
+# Supabase / Ktor / Coroutines
+-keep class io.github.jan.supabase.** { *; }
+-keep class io.ktor.** { *; }
+-dontwarn io.ktor.**
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory { *; }
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler { *; }
+
+
+# Giữ số dòng trong code để khi crash trên Crashlytics/Sentry vẫn map được dòng lỗi
+-keepattributes SourceFile, LineNumberTable
+
+# Tự động gỡ bỏ hoàn toàn lệnh Log (Android Log) khỏi bản Release để tăng tốc và bảo mật
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+}

@@ -23,8 +23,20 @@ android {
     buildTypes {
         release {
             optimization {
-                enable = false
+                enable = true
             }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+
+        debug {
+            // Môi trường debug nên để false để tăng tốc build và giữ nguyên stack trace
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {
