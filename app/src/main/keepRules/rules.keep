@@ -44,6 +44,18 @@
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory { *; }
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler { *; }
 
+# Jetpack Compose R8 / ProGuard rules to prevent NoSuchFieldError for consume_window_insets_tag and other R.id fields
+-keepclassmembers class androidx.compose.ui.R$id {
+    public static int *;
+}
+-keepclassmembers class androidx.compose.foundation.R$id {
+    public static int *;
+}
+-keepclassmembers class androidx.compose.material3.R$id {
+    public static int *;
+}
+-keep class androidx.compose.ui.R** { *; }
+
 
 # Giữ số dòng trong code để khi crash trên Crashlytics/Sentry vẫn map được dòng lỗi
 -keepattributes SourceFile, LineNumberTable

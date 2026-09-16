@@ -23,9 +23,22 @@ fun NavGraphBuilder.chatGraph(
 ) {
     composable<ChatsRoute> {
         val conversations by viewModel.conversations.collectAsState()
+        val searchedUsers by viewModel.searchedUsers.collectAsState()
+        val isAddDialogVisible by viewModel.isAddDialogVisible.collectAsState()
+
         ChatListScreen(
             conversations = conversations,
-            onConversationClick = { convId -> onNavigateToDetail(convId) }
+            searchedUsers = searchedUsers,
+            isAddDialogVisible = isAddDialogVisible,
+            onConversationClick = { convId -> onNavigateToDetail(convId) },
+            onAddClick = { viewModel.setAddDialogVisible(true) },
+            onDismissAddDialog = { viewModel.setAddDialogVisible(false) },
+            onSearchUser = { query -> viewModel.searchUsers(query) },
+            onStartConversation = { recipientId ->
+                viewModel.startConversation(recipientId) { convId ->
+                    onNavigateToDetail(convId)
+                }
+            }
         )
     }
     composable<ChatDetailRoute> { backStackEntry ->

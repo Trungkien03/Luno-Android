@@ -52,7 +52,17 @@ enum class TopLevelTab(val title: String, val icon: ImageVector) {
 
 @Composable
 fun LunoApp(
-    chatViewModel: ChatViewModel = viewModel(),
+    chatViewModel: ChatViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return ChatViewModel(
+                    AppModule.conversationRepository,
+                    AppModule.userRepository
+                ) as T
+            }
+        }
+    ),
 ) {
     val authViewModel: AuthViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
@@ -121,7 +131,6 @@ fun LunoApp(
                                         launchSingleTop = true
                                         restoreState = true
                                     }
-
                                     TopLevelTab.Profile -> navController.navigate(ProfileRoute) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
@@ -129,7 +138,6 @@ fun LunoApp(
                                         launchSingleTop = true
                                         restoreState = true
                                     }
-
                                     else -> navController.navigate(tab.name) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true

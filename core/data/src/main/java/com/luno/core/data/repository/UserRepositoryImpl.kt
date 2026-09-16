@@ -24,4 +24,23 @@ class UserRepositoryImpl(
         }
     }
 
+    override suspend fun searchUsers(query: String): Result<List<UserDto>> {
+        return try {
+            val users = supabaseClient.postgrest["users"]
+                .select()
+                .decodeList<UserDto>()
+            val filtered = if (query.isBlank()) {
+                users
+            } else {
+                users.filter {
+                    (it.email?.contains(query, ignoreCase = true) == true) ||
+                            (it.name?.contains(query, ignoreCase = true) == true) ||
+                            (it.id.contains(query, ignoreCase = true))
+                }
+            }
+            Result.success(filtered)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

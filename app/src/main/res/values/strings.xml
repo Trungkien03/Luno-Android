@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Luno</string>
+    <string name="default_user_name">User</string>
+    <string name="default_group_title">Group Chat</string>
+    <string name="msg_status_deleted">This message was deleted</string>
+    <string name="msg_status_no_messages">No messages yet</string>
+    <string name="msg_type_image">[Photo]</string>
+    <string name="msg_type_file">[Attachment]</string>
+    <string name="msg_type_audio">[Voice Message]</string>
 </resources>
