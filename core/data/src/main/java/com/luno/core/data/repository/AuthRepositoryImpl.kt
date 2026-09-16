@@ -1,21 +1,74 @@
 package com.luno.core.data.repository
 
+import com.luno.core.datastore.UserPreferencesDataSource
 import com.luno.core.domain.repository.AuthRepository
-import com.luno.core.network.di.SupabaseModule
+import com.luno.core.domain.repository.UserRepository
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.IDToken
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.serialization.json.jsonPrimitive
 
-class AuthRepositoryImpl : AuthRepository {
+class AuthRepositoryImpl(
+    private val userPreferencesDataSource: UserPreferencesDataSource? = null,
+    private val supabaseClient: SupabaseClient,
+    private val userRepository: UserRepository = UserRepositoryImpl(supabaseClient)
+) : AuthRepository {
     override suspend fun signInWithGoogle(idToken: String): Result<Unit> {
         return try {
-            SupabaseModule.client.auth.signInWith(IDToken) {
+            supabaseClient.auth.signInWith(IDToken) {
                 this.idToken = idToken
                 provider = Google
+            }
+            refreshUserInfo()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signOut(): Result<Unit> {
+        return try {
+            supabaseClient.auth.signOut()
+            userPreferencesDataSource?.clearUserInfo()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun refreshUserInfo(): Result<Unit> {
+        return try {
+            val user = supabaseClient.auth.currentUserOrNull()
+            if (user != null) {
+                val email = user.email ?: ""
+                val id = user.id
+                val authImg = user.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+                    ?: user.userMetadata?.get("picture")?.jsonPrimitive?.content
+                    ?: ""
+                val dbUser = userRepository.findUserById(id).getOrNull()
+                val finalImg = dbUser?.avatarUrl?.takeIf { it.isNotBlank() } ?: authImg
+
+                userPreferencesDataSource?.saveUserInfo(email, id, finalImg)
             }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
+    override fun currentUserEmail(): String? {
+        return supabaseClient.auth.currentUserOrNull()?.email
+    }
+
+    override fun currentUserImg(): String? {
+        val user = supabaseClient.auth.currentUserOrNull()
+        return user?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+            ?: user?.userMetadata?.get("picture")?.jsonPrimitive?.content
+    }
+
+    override val userEmailFlow: Flow<String?> = userPreferencesDataSource?.userEmail ?: flowOf(null)
+    override val userImgFlow: Flow<String?> = userPreferencesDataSource?.userImg ?: flowOf(null)
 }

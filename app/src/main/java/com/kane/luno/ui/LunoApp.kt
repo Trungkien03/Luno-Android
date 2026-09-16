@@ -8,19 +8,19 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CompassCalibration
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,10 +34,13 @@ import com.kane.luno.di.AppModule
 import com.luno.core.auth.navigation.LoginRoute
 import com.luno.core.auth.navigation.authGraph
 import com.luno.core.auth.ui.AuthViewModel
-import com.luno.feature.chat.ChatViewModel
 import com.luno.feature.chat.navigation.ChatDetailRoute
 import com.luno.feature.chat.navigation.ChatsRoute
 import com.luno.feature.chat.navigation.chatGraph
+import com.luno.feature.chat.viewmodels.ChatViewModel
+import com.luno.feature.profile.ProfileViewModel
+import com.luno.feature.profile.navigation.ProfileRoute
+import com.luno.feature.profile.navigation.profileGraph
 
 // Navigation Tabs Setup
 enum class TopLevelTab(val title: String, val icon: ImageVector) {
@@ -46,8 +49,6 @@ enum class TopLevelTab(val title: String, val icon: ImageVector) {
     Discover("Khám phá", Icons.Default.CompassCalibration),
     Profile("Cá nhân", Icons.Default.Person)
 }
-
-val ZaloBlue = Color(0xFF0068FF)
 
 @Composable
 fun LunoApp(
@@ -62,6 +63,30 @@ fun LunoApp(
         }
     )
 
+    val profileViewModel: ProfileViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return ProfileViewModel(AppModule.authRepository) as T
+            }
+        }
+    )
+
+    val isLoadingAuth by authViewModel.isLoadingAuth.collectAsState()
+    val userEmail by authViewModel.userEmail.collectAsState()
+
+    if (isLoadingAuth) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    val startDestination = if (userEmail != null) ChatsRoute else LoginRoute
+
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -69,51 +94,49 @@ fun LunoApp(
     // Logic for hiding bottom bar in detail screens
     val isBottomBarVisible = currentDestination?.hierarchy?.any {
         (it.route == ChatsRoute::class.qualifiedName) ||
+                (it.route == ProfileRoute::class.qualifiedName) ||
                 (it.route == "Contacts") ||
-                (it.route == "Discover") ||
-                (it.route == "Profile")
+                (it.route == "Discover")
     } == true
 
     Scaffold(
         bottomBar = {
             if (isBottomBarVisible) {
-                NavigationBar(
-                    containerColor = Color.White,
-                    contentColor = ZaloBlue
-                ) {
+                NavigationBar {
                     TopLevelTab.entries.forEach { tab ->
                         val isSelected = when (tab) {
                             TopLevelTab.Chats -> currentDestination.hierarchy.any { it.route == ChatsRoute::class.qualifiedName }
+                            TopLevelTab.Profile -> currentDestination.hierarchy.any { it.route == ProfileRoute::class.qualifiedName }
                             else -> currentDestination.hierarchy.any { it.route == tab.name }
                         }
-                        
+
                         NavigationBarItem(
                             icon = { Icon(tab.icon, contentDescription = tab.title) },
                             label = { Text(tab.title) },
                             selected = isSelected,
                             onClick = {
-                                if (tab == TopLevelTab.Chats) {
-                                    navController.navigate(ChatsRoute) {
+                                when (tab) {
+                                    TopLevelTab.Chats -> navController.navigate(ChatsRoute) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
-                                } else {
-                                    // Handle other mock tabs
-                                    navController.navigate(tab.name) {
+
+                                    TopLevelTab.Profile -> navController.navigate(ProfileRoute) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+
+                                    else -> navController.navigate(tab.name) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
                                 }
                             },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = ZaloBlue,
-                                selectedTextColor = ZaloBlue,
-                                unselectedIconColor = Color.Gray,
-                                unselectedTextColor = Color.Gray,
-                                indicatorColor = Color.White
-                            )
                         )
                     }
                 }
@@ -122,7 +145,7 @@ fun LunoApp(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = LoginRoute,
+            startDestination = startDestination,
             modifier = Modifier.padding(paddingValues)
         ) {
             authGraph(
@@ -143,11 +166,19 @@ fun LunoApp(
                     navController.popBackStack()
                 }
             )
-            
+
+            profileGraph(
+                viewModel = profileViewModel,
+                onSignedOut = {
+                    navController.navigate(LoginRoute) {
+                        popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                    }
+                }
+            )
+
             // Mock other routes
             composable("Contacts") { PlaceholderScreen("Danh bạ") }
             composable("Discover") { PlaceholderScreen("Khám phá") }
-            composable("Profile") { PlaceholderScreen("Cá nhân") }
         }
     }
 }
@@ -158,6 +189,6 @@ fun PlaceholderScreen(title: String) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = title, fontSize = 20.sp, color = Color.Gray)
+        Text(text = title, style = MaterialTheme.typography.titleLarge)
     }
 }

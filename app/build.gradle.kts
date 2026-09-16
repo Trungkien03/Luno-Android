@@ -71,10 +71,13 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:domain"))
     implementation(project(":core:network"))
+    implementation(project(":core:datastore"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:profile"))
     implementation(libs.coil.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.androidx.datastore.preferences)
 }

@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -46,4 +47,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(project(":core:model"))
+    implementation(project(":core:domain"))
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
 }

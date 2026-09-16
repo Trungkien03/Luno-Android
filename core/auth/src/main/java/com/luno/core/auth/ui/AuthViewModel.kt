@@ -12,7 +12,11 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.luno.core.auth.BuildConfig
 import com.luno.core.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 // Trạng thái của phiên đăng nhập
@@ -28,6 +32,27 @@ class AuthViewModel(
 ) : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
+
+    private val _isLoadingAuth = MutableStateFlow(true)
+    val isLoadingAuth: StateFlow<Boolean> = _isLoadingAuth.asStateFlow()
+
+    val userEmail: StateFlow<String?> = authRepository.userEmailFlow
+        .onEach { _isLoadingAuth.value = false }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = authRepository.currentUserEmail()
+        )
+
+    init {
+        viewModelScope.launch {
+            try {
+                authRepository.refreshUserInfo()
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Failed to refresh user info on startup", e)
+            }
+        }
+    }
 
     private val webClientId = BuildConfig.GOOGLE_CLIENT_ID
 

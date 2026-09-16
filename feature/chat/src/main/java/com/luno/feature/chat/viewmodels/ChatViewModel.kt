@@ -1,4 +1,4 @@
-package com.luno.feature.chat
+package com.luno.feature.chat.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

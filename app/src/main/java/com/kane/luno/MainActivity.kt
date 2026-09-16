@@ -6,12 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import com.kane.luno.di.AppModule
 import com.kane.luno.ui.LunoApp
 import com.kane.luno.ui.theme.LunoTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppModule.initialize(applicationContext)
         enableEdgeToEdge()
         setContent {
             LunoTheme {

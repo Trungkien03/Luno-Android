@@ -1,23 +1,54 @@
 package com.luno.feature.chat
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.luno.core.model.Conversation
 import com.luno.core.model.Message
@@ -55,42 +86,35 @@ fun ChatDetailScreen(
                         Column {
                             Text(
                                 text = conversation.recipient.name,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
                                 text = if (conversation.recipient.isOnline) "Đang hoạt động" else conversation.recipient.lastSeen,
-                                fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.8f)
+                                style = MaterialTheme.typography.labelSmall,
                             )
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Trở về", tint = Color.White)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Trở về")
                     }
                 },
                 actions = {
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.Phone, contentDescription = "Gọi điện", tint = Color.White)
+                        Icon(Icons.Default.Phone, contentDescription = "Gọi điện")
                     }
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.Videocam, contentDescription = "Video call", tint = Color.White)
+                        Icon(Icons.Default.Videocam, contentDescription = "Video call")
                     }
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ZaloBlue)
             )
         },
         bottomBar = {
-            Surface(
-                color = Color.White,
-                tonalElevation = 8.dp
-            ) {
+            Surface(tonalElevation = 8.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -100,26 +124,19 @@ fun ChatDetailScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.Image, contentDescription = "Ảnh", tint = Color.Gray)
+                        Icon(Icons.Default.Image, contentDescription = "Ảnh")
                     }
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.Mic, contentDescription = "Voice", tint = Color.Gray)
+                        Icon(Icons.Default.Mic, contentDescription = "Voice")
                     }
 
                     OutlinedTextField(
                         value = textInput,
                         onValueChange = { textInput = it },
-                        placeholder = { Text("Tin nhắn", color = Color.Gray) },
+                        placeholder = { Text("Tin nhắn") },
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 40.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.LightGray,
-                            unfocusedBorderColor = Color.LightGray,
-                            focusedContainerColor = Color(0xFFF0F2F5),
-                            unfocusedContainerColor = Color(0xFFF0F2F5)
-                        ),
                         maxLines = 4
                     )
 
@@ -139,22 +156,26 @@ fun ChatDetailScreen(
                         Icon(
                             Icons.Default.Send,
                             contentDescription = "Gửi",
-                            tint = if (textInput.isBlank()) Color.Gray else ZaloBlue
+                            tint = if (textInput.isBlank()) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                         )
                     }
                 }
             }
         },
-        containerColor = Color(0xFFEFEFF4)
     ) { paddingValues ->
+        val layoutDirection = LocalLayoutDirection.current
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 12.dp)
+            contentPadding = PaddingValues(
+                start = 16.dp + paddingValues.calculateStartPadding(layoutDirection),
+                end = 16.dp + paddingValues.calculateEndPadding(layoutDirection),
+                top = paddingValues.calculateTopPadding(),
+                bottom = paddingValues.calculateBottomPadding()
+            )
         ) {
             items(messages) { message ->
                 MessageBubble(message = message)
@@ -171,24 +192,19 @@ fun MessageBubble(message: Message) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
     ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .background(
-                    color = if (isMe) Color(0xFFE8F3FF) else Color.White,
-                    shape = RoundedCornerShape(
-                        topStart = 12.dp,
-                        topEnd = 12.dp,
-                        bottomStart = if (isMe) 12.dp else 2.dp,
-                        bottomEnd = if (isMe) 2.dp else 12.dp
-                    )
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+        Surface(
+            modifier = Modifier.widthIn(max = 280.dp),
+            color = if (isMe) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            shape = MaterialTheme.shapes.medium,
         ) {
             Text(
                 text = message.text,
-                fontSize = 15.sp,
-                color = Color(0xFF050505)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }

@@ -48,6 +48,8 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:domain"))
     implementation(project(":core:network"))
+    implementation(project(":core:datastore"))
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.gotrue.kt)
+    implementation(libs.supabase.postgrest.kt)
 }

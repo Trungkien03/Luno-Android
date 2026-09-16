@@ -58,7 +58,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     testImplementation(libs.junit)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
@@ -76,8 +75,8 @@ dependencies {
     implementation(libs.retrofit.converter.kotlinx.serialization)
 
     // Supabase & Ktor
-    implementation(platform(libs.supabase.bom))
-    implementation(libs.supabase.postgrest.kt)
-    implementation(libs.supabase.gotrue.kt)
-    implementation(libs.ktor.client.android)
+    api(platform(libs.supabase.bom))
+    api(libs.supabase.postgrest.kt)
+    api(libs.supabase.gotrue.kt)
+    api(libs.ktor.client.android)
 }
