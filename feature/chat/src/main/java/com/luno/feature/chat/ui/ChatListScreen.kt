@@ -1,4 +1,4 @@
-package com.luno.feature.chat
+package com.luno.feature.chat.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,16 +26,13 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +51,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
     conversations: List<Conversation>,
@@ -73,37 +69,44 @@ fun ChatListScreen(
                 it.lastMessage.text.contains(searchQuery, ignoreCase = true)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Tìm kiếm") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Code")
-                    }
-                    IconButton(onClick = onAddClick) {
-                        Icon(Icons.Default.Add, contentDescription = "Thêm")
-                    }
-                },
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Search bar and actions header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Tìm kiếm") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
             )
-        },
-    ) { paddingValues ->
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = { }) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Code")
+            }
+            IconButton(onClick = onAddClick) {
+                Icon(Icons.Default.Add, contentDescription = "Thêm")
+            }
+        }
+
+        HorizontalDivider()
+
         if (conversations.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
+                    .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -140,10 +143,8 @@ fun ChatListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(
-                    bottom = paddingValues.calculateBottomPadding()
-                )
+                    .weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(filteredConversations) { conv ->
                     ConversationItem(conversation = conv) { onConversationClick(conv.id) }

@@ -5,8 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import com.luno.feature.chat.ChatDetailScreen
-import com.luno.feature.chat.ChatListScreen
+import com.luno.feature.chat.ui.ChatDetailScreen
+import com.luno.feature.chat.ui.ChatListScreen
 import com.luno.feature.chat.viewmodels.ChatViewModel
 import kotlinx.serialization.Serializable
 
