@@ -1,8 +1,10 @@
 package com.kane.luno.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CompassCalibration
@@ -110,6 +112,10 @@ fun LunoApp(
     } == true
 
     Scaffold(
+        // Only the bottom nav bar inset is reserved here; screens own their
+        // top inset (either via their own TopAppBar, or statusBarsPadding()
+        // when they have no top bar) so it isn't double-reserved.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isBottomBarVisible) {
                 NavigationBar {
@@ -194,7 +200,9 @@ fun LunoApp(
 @Composable
 fun PlaceholderScreen(title: String) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
         Text(text = title, style = MaterialTheme.typography.titleLarge)

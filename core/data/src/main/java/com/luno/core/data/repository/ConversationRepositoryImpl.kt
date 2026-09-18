@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -54,7 +55,9 @@ class ConversationRepositoryImpl(
 
     override suspend fun fetchConversations() {
         try {
-            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            println("LunoDebug: fetchConversations currentUserId = $currentUserId")
+            if (currentUserId == null) return
 
             val memberships = supabaseClient.postgrest["conversation_members"]
                 .select {
@@ -63,6 +66,7 @@ class ConversationRepositoryImpl(
                     }
                 }.decodeList<JsonObject>()
 
+            println("LunoDebug: memberships count = ${memberships.size}")
             val convIds = memberships.mapNotNull { it["conversation_id"]?.jsonPrimitive?.content }
             if (convIds.isEmpty()) {
                 _conversationsFlow.value = emptyList()
@@ -76,13 +80,14 @@ class ConversationRepositoryImpl(
                     }
                 }.decodeList<JsonObject>()
 
+            println("LunoDebug: conversationsData count = ${conversationsData.size}")
             val conversationList = mutableListOf<Conversation>()
 
             for (convJson in conversationsData) {
                 val convId = convJson["id"]?.jsonPrimitive?.content ?: continue
-                val type = convJson["type"]?.jsonPrimitive?.content ?: "direct"
-                val title = convJson["title"]?.jsonPrimitive?.content ?: ""
-                val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.content ?: ""
+                val type = convJson["type"]?.jsonPrimitive?.contentOrNull ?: "direct"
+                val title = convJson["title"]?.jsonPrimitive?.contentOrNull ?: ""
+                val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
 
                 val members = supabaseClient.postgrest["conversation_members"]
                     .select {
@@ -107,15 +112,17 @@ class ConversationRepositoryImpl(
                         }.decodeSingleOrNull<JsonObject>()
 
                     if (userRecord != null) {
-                        val name = userRecord["display_name"]?.jsonPrimitive?.content
-                            ?: userRecord["email"]?.jsonPrimitive?.content
+                        val name = userRecord["display_name"]?.jsonPrimitive?.contentOrNull
+                            ?: userRecord["name"]?.jsonPrimitive?.contentOrNull
+                            ?: userRecord["email"]?.jsonPrimitive?.contentOrNull
                             ?: "Người dùng"
-                        val userAvatar = userRecord["avatar_url"]?.jsonPrimitive?.content ?: ""
+                        val userAvatar =
+                            userRecord["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
                         recipient = User(id = otherUserId, name = name, avatarUrl = userAvatar)
                     }
                 }
 
-                val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.content
+                val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.contentOrNull
                 var lastMessage = Message(
                     id = "m_default",
                     senderId = "",
@@ -162,6 +169,7 @@ class ConversationRepositoryImpl(
             _conversationsFlow.value = conversationList
         } catch (e: Exception) {
             e.printStackTrace()
+            println("LunoDebug: fetchConversations error: ${e.message}")
         }
     }
 
@@ -202,6 +210,24 @@ class ConversationRepositoryImpl(
                 }
             }
 
+            // Fetch recipient user info for immediate local caching
+            val userRecord = supabaseClient.postgrest["users"]
+                .select {
+                    filter {
+                        eq("id", recipientId)
+                    }
+                }.decodeSingleOrNull<JsonObject>()
+
+            val recipientName = userRecord?.let {
+                it["display_name"]?.jsonPrimitive?.content
+                    ?: it["name"]?.jsonPrimitive?.content
+                    ?: it["email"]?.jsonPrimitive?.content
+                    ?: "Người dùng"
+            } ?: "Người dùng"
+            val recipientAvatar = userRecord?.get("avatar_url")?.jsonPrimitive?.content ?: ""
+            val recipient =
+                User(id = recipientId, name = recipientName, avatarUrl = recipientAvatar)
+
             val newConvJson = supabaseClient.postgrest["conversations"]
                 .insert(
                     JsonObject(mapOf("type" to JsonPrimitive("direct")))
@@ -230,11 +256,150 @@ class ConversationRepositoryImpl(
                     )
                 )
 
-            fetchConversations()
+            val newConversation = Conversation(
+                id = newConvId,
+                recipient = recipient,
+                lastMessage = Message(
+                    id = "m_default",
+                    senderId = "",
+                    text = "Chưa có tin nhắn",
+                    timestamp = System.currentTimeMillis(),
+                    isRead = true
+                ),
+                unreadCount = 0,
+                isPinned = false
+            )
+
+            val currentList = _conversationsFlow.value.toMutableList()
+            if (currentList.none { it.id == newConvId }) {
+                currentList.add(0, newConversation)
+                _conversationsFlow.value = currentList
+            }
+
             Result.success(newConvId)
         } catch (e: Exception) {
+            e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    override suspend fun getConversationDetails(convId: String): Conversation? {
+        getConversation(convId)?.let { return it }
+        return try {
+            val currentUserId =
+                supabaseClient.auth.currentUserOrNull()?.id ?: return fallbackConversation(convId)
+
+            val convJson = supabaseClient.postgrest["conversations"]
+                .select {
+                    filter {
+                        eq("id", convId)
+                    }
+                }.decodeSingleOrNull<JsonObject>() ?: return fallbackConversation(convId)
+
+            val type = convJson["type"]?.jsonPrimitive?.contentOrNull ?: "direct"
+            val title = convJson["title"]?.jsonPrimitive?.contentOrNull ?: ""
+            val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
+
+            val members = supabaseClient.postgrest["conversation_members"]
+                .select {
+                    filter {
+                        eq("conversation_id", convId)
+                    }
+                }.decodeList<JsonObject>()
+
+            val otherMemberIds = members
+                .mapNotNull { it["user_id"]?.jsonPrimitive?.content }
+                .filter { it != currentUserId }
+
+            var recipient =
+                User(id = "", name = title.ifBlank { "Người dùng" }, avatarUrl = avatarUrl)
+            if (type == "direct" && otherMemberIds.isNotEmpty()) {
+                val otherUserId = otherMemberIds.first()
+                val userRecord = supabaseClient.postgrest["users"]
+                    .select {
+                        filter {
+                            eq("id", otherUserId)
+                        }
+                    }.decodeSingleOrNull<JsonObject>()
+
+                if (userRecord != null) {
+                    val name = userRecord["display_name"]?.jsonPrimitive?.contentOrNull
+                        ?: userRecord["name"]?.jsonPrimitive?.contentOrNull
+                        ?: userRecord["email"]?.jsonPrimitive?.contentOrNull
+                        ?: "Người dùng"
+                    val userAvatar = userRecord["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
+                    recipient = User(id = otherUserId, name = name, avatarUrl = userAvatar)
+                }
+            }
+
+            val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.contentOrNull
+            var lastMessage = Message(
+                id = "m_default",
+                senderId = "",
+                text = "Chưa có tin nhắn",
+                timestamp = System.currentTimeMillis(),
+                isRead = true
+            )
+
+            if (!lastMsgId.isNullOrBlank()) {
+                val msgRecord = supabaseClient.postgrest["messages"]
+                    .select {
+                        filter {
+                            eq("id", lastMsgId)
+                        }
+                    }.decodeSingleOrNull<JsonObject>()
+
+                if (msgRecord != null) {
+                    val msgId = msgRecord["id"]?.jsonPrimitive?.content ?: ""
+                    val senderId = msgRecord["sender_id"]?.jsonPrimitive?.content ?: ""
+                    val content = msgRecord["content"]?.jsonPrimitive?.content ?: ""
+                    val createdAt = msgRecord["created_at"]?.jsonPrimitive?.content
+                    val timestamp = parseTimestamp(createdAt)
+                    lastMessage = Message(
+                        id = msgId,
+                        senderId = senderId,
+                        text = content,
+                        timestamp = timestamp,
+                        isRead = true
+                    )
+                }
+            }
+
+            val conversation = Conversation(
+                id = convId,
+                recipient = recipient,
+                lastMessage = lastMessage,
+                unreadCount = 0,
+                isPinned = false
+            )
+
+            val currentList = _conversationsFlow.value.toMutableList()
+            if (currentList.none { it.id == convId }) {
+                currentList.add(conversation)
+                _conversationsFlow.value = currentList
+            }
+
+            conversation
+        } catch (e: Exception) {
+            e.printStackTrace()
+            fallbackConversation(convId)
+        }
+    }
+
+    private fun fallbackConversation(convId: String): Conversation {
+        return Conversation(
+            id = convId,
+            recipient = User(id = "", name = "Cuộc trò chuyện", avatarUrl = ""),
+            lastMessage = Message(
+                id = "m_default",
+                senderId = "",
+                text = "Chưa có tin nhắn",
+                timestamp = System.currentTimeMillis(),
+                isRead = true
+            ),
+            unreadCount = 0,
+            isPinned = false
+        )
     }
 
     override fun getMessagesForConversation(convId: String): Flow<List<Message>> {
@@ -338,5 +503,9 @@ class ConversationRepositoryImpl(
 
     override fun getConversation(convId: String): Conversation? {
         return _conversationsFlow.value.find { it.id == convId }
+    }
+
+    override fun getCurrentUserId(): String? {
+        return supabaseClient.auth.currentUserOrNull()?.id
     }
 }

@@ -22,16 +22,30 @@ class ChatViewModel(
     val conversations: StateFlow<List<Conversation>> = conversationRepository.conversationsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val currentUserId: String?
+        get() = conversationRepository.getCurrentUserId()
+
     private val _searchedUsers = MutableStateFlow<List<UserDto>>(emptyList())
     val searchedUsers: StateFlow<List<UserDto>> = _searchedUsers.asStateFlow()
 
     private val _isAddDialogVisible = MutableStateFlow(false)
     val isAddDialogVisible: StateFlow<Boolean> = _isAddDialogVisible.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     init {
+        refreshConversations()
+    }
+
+    fun refreshConversations() {
         viewModelScope.launch {
             conversationRepository.fetchConversations()
         }
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
     }
 
     fun setAddDialogVisible(visible: Boolean) {
@@ -45,6 +59,8 @@ class ChatViewModel(
         viewModelScope.launch {
             userRepository.searchUsers(query).onSuccess { users ->
                 _searchedUsers.value = users
+            }.onFailure { error ->
+                error.printStackTrace()
             }
         }
     }
@@ -55,12 +71,19 @@ class ChatViewModel(
             result.onSuccess { convId ->
                 _isAddDialogVisible.value = false
                 onSuccess(convId)
+            }.onFailure { error ->
+                error.printStackTrace()
+                _errorMessage.value =
+                    "Không thể tạo cuộc trò chuyện: ${error.localizedMessage ?: error.toString()}"
             }
         }
     }
 
     private val _selectedConversationId = MutableStateFlow<String?>(null)
     val selectedConversationId: StateFlow<String?> = _selectedConversationId.asStateFlow()
+
+    private val _currentConversation = MutableStateFlow<Conversation?>(null)
+    val currentConversation: StateFlow<Conversation?> = _currentConversation.asStateFlow()
 
     private val _currentMessages = MutableStateFlow<List<Message>>(emptyList())
     val currentMessages: StateFlow<List<Message>> = _currentMessages.asStateFlow()
@@ -69,11 +92,15 @@ class ChatViewModel(
         _selectedConversationId.value = convId
         if (convId != null) {
             viewModelScope.launch {
+                val conv = conversationRepository.getConversationDetails(convId)
+                _currentConversation.value = conv
+
                 conversationRepository.getMessagesForConversation(convId).collect { msgs ->
                     _currentMessages.value = msgs
                 }
             }
         } else {
+            _currentConversation.value = null
             _currentMessages.value = emptyList()
         }
     }

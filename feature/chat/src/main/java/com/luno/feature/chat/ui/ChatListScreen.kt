@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -56,11 +57,14 @@ fun ChatListScreen(
     conversations: List<Conversation>,
     searchedUsers: List<UserDto>,
     isAddDialogVisible: Boolean,
+    errorMessage: String? = null,
     onConversationClick: (String) -> Unit,
     onAddClick: () -> Unit,
     onDismissAddDialog: () -> Unit,
     onSearchUser: (String) -> Unit,
     onStartConversation: (String) -> Unit,
+    onRefresh: () -> Unit = {},
+    onErrorDismiss: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
@@ -69,10 +73,35 @@ fun ChatListScreen(
                 it.lastMessage.text.contains(searchQuery, ignoreCase = true)
     }
 
+    val newUsersToChat = if (searchQuery.isNotBlank()) {
+        searchedUsers.filter { user ->
+            conversations.none { it.recipient.id == user.id } &&
+                    (user.effectiveName.contains(searchQuery, ignoreCase = true) ||
+                            (user.email?.contains(searchQuery, ignoreCase = true) == true) ||
+                            user.id.contains(searchQuery, ignoreCase = true))
+        }
+    } else {
+        emptyList()
+    }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = onErrorDismiss,
+            title = { Text("Lỗi tạo cuộc trò chuyện") },
+            text = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(onClick = onErrorDismiss) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
     ) {
         // Search bar and actions header
         Row(
@@ -83,8 +112,11 @@ fun ChatListScreen(
         ) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Tìm kiếm") },
+                onValueChange = {
+                    searchQuery = it
+                    onSearchUser(it)
+                },
+                placeholder = { Text("Tìm kiếm cuộc trò chuyện hoặc người dùng...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 modifier = Modifier
@@ -92,8 +124,8 @@ fun ChatListScreen(
                     .height(52.dp),
             )
             Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = { }) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Code")
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Làm mới")
             }
             IconButton(onClick = onAddClick) {
                 Icon(Icons.Default.Add, contentDescription = "Thêm")
@@ -102,7 +134,7 @@ fun ChatListScreen(
 
         HorizontalDivider()
 
-        if (conversations.isEmpty()) {
+        if (conversations.isEmpty() && searchQuery.isBlank()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -146,9 +178,52 @@ fun ChatListScreen(
                     .weight(1f),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(filteredConversations) { conv ->
-                    ConversationItem(conversation = conv) { onConversationClick(conv.id) }
-                    HorizontalDivider(modifier = Modifier.padding(start = 76.dp))
+                if (filteredConversations.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Cuộc trò chuyện",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    items(filteredConversations) { conv ->
+                        ConversationItem(conversation = conv) { onConversationClick(conv.id) }
+                        HorizontalDivider(modifier = Modifier.padding(start = 76.dp))
+                    }
+                }
+
+                if (searchQuery.isNotBlank()) {
+                    item {
+                        Text(
+                            text = "Người dùng",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    if (newUsersToChat.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Không tìm thấy người dùng mới phù hợp",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        items(newUsersToChat) { user ->
+                            UserSearchItem(user = user) {
+                                onStartConversation(user.id)
+                            }
+                            HorizontalDivider(modifier = Modifier.padding(start = 76.dp))
+                        }
+                    }
                 }
             }
         }
@@ -161,6 +236,41 @@ fun ChatListScreen(
                 onSelectUser = onStartConversation
             )
         }
+    }
+}
+
+@Composable
+fun UserSearchItem(
+    user: UserDto,
+    onClick: () -> Unit
+) {
+    val displayName = user.effectiveName
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(52.dp)) {
+            AsyncImage(
+                model = user.avatarUrl ?: "",
+                contentDescription = displayName,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -191,7 +301,7 @@ fun AddConversationDialog(
                             query = it
                             onSearch(it)
                         },
-                        placeholder = { Text("Tìm theo tên hoặc email...") },
+                        placeholder = { Text("Tìm theo tên...") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -224,39 +334,30 @@ fun AddConversationDialog(
                                 .weight(1f)
                         ) {
                             items(searchedUsers) { user ->
-                                val userName = user.name
-                                val userEmail = user.email
+                                val displayName = user.effectiveName
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onSelectUser(user.id) }
-                                        .padding(vertical = 8.dp),
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     AsyncImage(
                                         model = user.avatarUrl ?: "",
-                                        contentDescription = userName ?: userEmail,
+                                        contentDescription = displayName,
                                         modifier = Modifier
                                             .size(40.dp)
                                             .clip(CircleShape)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = userName ?: userEmail ?: "Người dùng",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        if (!userEmail.isNullOrBlank() && userName != null) {
-                                            Text(
-                                                text = userEmail,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
+                                    Text(
+                                        text = displayName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
-                                HorizontalDivider()
+                                HorizontalDivider(modifier = Modifier.padding(start = 68.dp))
                             }
                         }
                     }
@@ -273,7 +374,7 @@ fun AddConversationDialog(
                         onClick = { showManualInput = false },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("Tìm kiếm theo tên/email")
+                        Text("Tìm kiếm theo tên")
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Button(

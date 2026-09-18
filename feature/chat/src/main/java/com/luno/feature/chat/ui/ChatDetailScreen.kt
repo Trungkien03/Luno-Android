@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -59,6 +60,7 @@ import kotlinx.coroutines.launch
 fun ChatDetailScreen(
     conversation: Conversation,
     messages: List<Message>,
+    currentUserId: String?,
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit
 ) {
@@ -168,25 +170,59 @@ fun ChatDetailScreen(
         },
     ) { paddingValues ->
         val layoutDirection = LocalLayoutDirection.current
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(
-                start = 16.dp + paddingValues.calculateStartPadding(layoutDirection),
-                end = 16.dp + paddingValues.calculateEndPadding(layoutDirection),
-                top = paddingValues.calculateTopPadding(),
-                bottom = paddingValues.calculateBottomPadding()
-            )
-        ) {
-            items(messages) { message ->
-                MessageBubble(message = message)
+        if (messages.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    AsyncImage(
+                        model = conversation.recipient.avatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = conversation.recipient.name,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Bắt đầu cuộc trò chuyện với ${conversation.recipient.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(
+                    start = 16.dp + paddingValues.calculateStartPadding(layoutDirection),
+                    end = 16.dp + paddingValues.calculateEndPadding(layoutDirection),
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = paddingValues.calculateBottomPadding()
+                )
+            ) {
+                items(messages) { message ->
+                    MessageBubble(message = message, currentUserId = currentUserId)
+                }
             }
         }
     }
 }
 
 @Composable
-fun MessageBubble(message: Message) {
-    val isMe = message.senderId == "me"
+fun MessageBubble(message: Message, currentUserId: String?) {
+    val isMe = message.senderId == currentUserId || message.senderId == "me"
 
     Row(
         modifier = Modifier.fillMaxWidth(),
