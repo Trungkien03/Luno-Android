@@ -112,9 +112,6 @@ fun LunoApp(
     } == true
 
     Scaffold(
-        // Only the bottom nav bar inset is reserved here; screens own their
-        // top inset (either via their own TopAppBar, or statusBarsPadding()
-        // when they have no top bar) so it isn't double-reserved.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isBottomBarVisible) {

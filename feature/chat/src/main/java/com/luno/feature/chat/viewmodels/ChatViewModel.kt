@@ -7,6 +7,7 @@ import com.luno.core.domain.repository.UserRepository
 import com.luno.core.model.Conversation
 import com.luno.core.model.Message
 import com.luno.core.model.UserDto
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -88,10 +89,18 @@ class ChatViewModel(
     private val _currentMessages = MutableStateFlow<List<Message>>(emptyList())
     val currentMessages: StateFlow<List<Message>> = _currentMessages.asStateFlow()
 
+    private var messagesJob: Job? = null
+
     fun selectConversation(convId: String?) {
+        val previousId = _selectedConversationId.value
         _selectedConversationId.value = convId
+        messagesJob?.cancel()
+        if (previousId != null && previousId != convId) {
+            conversationRepository.stopObservingMessages(previousId)
+        }
+
         if (convId != null) {
-            viewModelScope.launch {
+            messagesJob = viewModelScope.launch {
                 val conv = conversationRepository.getConversationDetails(convId)
                 _currentConversation.value = conv
 
@@ -103,6 +112,11 @@ class ChatViewModel(
             _currentConversation.value = null
             _currentMessages.value = emptyList()
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _selectedConversationId.value?.let { conversationRepository.stopObservingMessages(it) }
     }
 
     fun sendMessage(text: String) {
