@@ -2,16 +2,17 @@ package com.luno.feature.chat.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.Message
+import com.luno.core.domain.model.User
 import com.luno.core.domain.repository.ConversationRepository
 import com.luno.core.domain.repository.UserRepository
-import com.luno.core.model.Conversation
-import com.luno.core.model.Message
-import com.luno.core.model.UserDto
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -26,11 +27,14 @@ class ChatViewModel(
     val currentUserId: String?
         get() = conversationRepository.getCurrentUserId()
 
-    private val _searchedUsers = MutableStateFlow<List<UserDto>>(emptyList())
-    val searchedUsers: StateFlow<List<UserDto>> = _searchedUsers.asStateFlow()
+    private val _searchedUsers = MutableStateFlow<List<User>>(emptyList())
+    val searchedUsers: StateFlow<List<User>> = _searchedUsers.asStateFlow()
 
     private val _isAddDialogVisible = MutableStateFlow(false)
     val isAddDialogVisible: StateFlow<Boolean> = _isAddDialogVisible.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -41,7 +45,13 @@ class ChatViewModel(
 
     fun refreshConversations() {
         viewModelScope.launch {
-            conversationRepository.fetchConversations()
+            _isLoading.value = true
+            try {
+                conversationRepository.updateOnlineStatus(true)
+                conversationRepository.fetchConversations()
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
@@ -83,8 +93,15 @@ class ChatViewModel(
     private val _selectedConversationId = MutableStateFlow<String?>(null)
     val selectedConversationId: StateFlow<String?> = _selectedConversationId.asStateFlow()
 
-    private val _currentConversation = MutableStateFlow<Conversation?>(null)
-    val currentConversation: StateFlow<Conversation?> = _currentConversation.asStateFlow()
+    val currentConversation: StateFlow<Conversation?> = combine(
+        conversations,
+        _selectedConversationId
+    ) { convList, selectedId ->
+        if (selectedId == null) null
+        else convList.find { it.id == selectedId } ?: conversationRepository.getConversationDetails(
+            selectedId
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _currentMessages = MutableStateFlow<List<Message>>(emptyList())
     val currentMessages: StateFlow<List<Message>> = _currentMessages.asStateFlow()
@@ -101,15 +118,13 @@ class ChatViewModel(
 
         if (convId != null) {
             messagesJob = viewModelScope.launch {
-                val conv = conversationRepository.getConversationDetails(convId)
-                _currentConversation.value = conv
+                conversationRepository.getConversationDetails(convId)
 
                 conversationRepository.getMessagesForConversation(convId).collect { msgs ->
                     _currentMessages.value = msgs
                 }
             }
         } else {
-            _currentConversation.value = null
             _currentMessages.value = emptyList()
         }
     }
@@ -121,7 +136,9 @@ class ChatViewModel(
 
     fun sendMessage(text: String) {
         val convId = _selectedConversationId.value ?: return
-        conversationRepository.sendMessage(convId, text)
+        viewModelScope.launch {
+            conversationRepository.sendMessage(convId, text)
+        }
     }
 
     fun getConversation(convId: String): Conversation? {

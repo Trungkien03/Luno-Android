@@ -1,5 +1,6 @@
 package com.luno.feature.chat.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,8 +52,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.luno.core.model.Conversation
-import com.luno.core.model.Message
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.Message
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +85,14 @@ fun ChatDetailScreen(
                                     .fillMaxSize()
                                     .clip(CircleShape)
                             )
+                            if (conversation.recipient.isActuallyOnline) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+                                        .align(Alignment.BottomEnd)
+                                )
+                            }
                         }
                         Column {
                             Text(
@@ -91,7 +100,7 @@ fun ChatDetailScreen(
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = if (conversation.recipient.isOnline) "Đang hoạt động" else conversation.recipient.lastSeen,
+                                text = conversation.recipient.lastSeenFormatted,
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }

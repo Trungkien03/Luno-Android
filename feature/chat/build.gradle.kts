@@ -47,7 +47,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    implementation(project(":core:model"))
     implementation(project(":core:domain"))
     implementation(project(":core:data"))
     implementation(libs.coil.compose)

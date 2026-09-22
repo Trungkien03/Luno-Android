@@ -31,6 +31,7 @@ fun NavGraphBuilder.chatGraph(
         val conversations by viewModel.conversations.collectAsState()
         val searchedUsers by viewModel.searchedUsers.collectAsState()
         val isAddDialogVisible by viewModel.isAddDialogVisible.collectAsState()
+        val isLoading by viewModel.isLoading.collectAsState()
         val errorMessage by viewModel.errorMessage.collectAsState()
 
         LaunchedEffect(Unit) {
@@ -41,6 +42,7 @@ fun NavGraphBuilder.chatGraph(
             conversations = conversations,
             searchedUsers = searchedUsers,
             isAddDialogVisible = isAddDialogVisible,
+            isLoading = isLoading,
             errorMessage = errorMessage,
             onConversationClick = { convId -> onNavigateToDetail(convId) },
             onAddClick = { viewModel.setAddDialogVisible(true) },

@@ -1,7 +1,7 @@
 package com.luno.core.domain.repository
 
-import com.luno.core.model.Conversation
-import com.luno.core.model.Message
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.Message
 import kotlinx.coroutines.flow.Flow
 
 interface ConversationRepository {
@@ -11,7 +11,8 @@ interface ConversationRepository {
     suspend fun getConversationDetails(convId: String): Conversation?
     fun getMessagesForConversation(convId: String): Flow<List<Message>>
     fun stopObservingMessages(convId: String)
-    fun sendMessage(convId: String, text: String)
+    suspend fun sendMessage(convId: String, text: String): Result<Unit>
     fun getConversation(convId: String): Conversation?
     fun getCurrentUserId(): String?
+    suspend fun updateOnlineStatus(isOnline: Boolean)
 }

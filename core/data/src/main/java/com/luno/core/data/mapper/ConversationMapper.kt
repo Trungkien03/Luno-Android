@@ -1,9 +1,9 @@
 package com.luno.core.data.mapper
 
-import com.luno.core.model.Conversation
-import com.luno.core.model.ConversationDto
-import com.luno.core.model.Message
-import com.luno.core.model.User
+import com.luno.core.data.model.ConversationDto
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.Message
+import com.luno.core.domain.model.User
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone

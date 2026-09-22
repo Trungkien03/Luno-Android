@@ -1,8 +1,8 @@
 package com.luno.core.domain.repository
 
-import com.luno.core.model.UserDto
+import com.luno.core.domain.model.User
 
 interface UserRepository {
-    suspend fun findUserById(userId: String): Result<UserDto?>
-    suspend fun searchUsers(query: String): Result<List<UserDto>>
+    suspend fun findUserById(userId: String): Result<User?>
+    suspend fun searchUsers(query: String): Result<List<User>>
 }

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,8 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.luno.core.model.Conversation
-import com.luno.core.model.UserDto
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.User
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,8 +56,9 @@ import java.util.Locale
 @Composable
 fun ChatListScreen(
     conversations: List<Conversation>,
-    searchedUsers: List<UserDto>,
+    searchedUsers: List<User>,
     isAddDialogVisible: Boolean,
+    isLoading: Boolean = false,
     errorMessage: String? = null,
     onConversationClick: (String) -> Unit,
     onAddClick: () -> Unit,
@@ -76,8 +78,7 @@ fun ChatListScreen(
     val newUsersToChat = if (searchQuery.isNotBlank()) {
         searchedUsers.filter { user ->
             conversations.none { it.recipient.id == user.id } &&
-                    (user.effectiveName.contains(searchQuery, ignoreCase = true) ||
-                            (user.email?.contains(searchQuery, ignoreCase = true) == true) ||
+                    (user.name.contains(searchQuery, ignoreCase = true) ||
                             user.id.contains(searchQuery, ignoreCase = true))
         }
     } else {
@@ -134,7 +135,16 @@ fun ChatListScreen(
 
         HorizontalDivider()
 
-        if (conversations.isEmpty() && searchQuery.isBlank()) {
+        if (isLoading && conversations.isEmpty() && searchQuery.isBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (conversations.isEmpty() && searchQuery.isBlank()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -241,10 +251,10 @@ fun ChatListScreen(
 
 @Composable
 fun UserSearchItem(
-    user: UserDto,
+    user: User,
     onClick: () -> Unit
 ) {
-    val displayName = user.effectiveName
+    val displayName = user.name
 
     Row(
         modifier = Modifier
@@ -255,7 +265,7 @@ fun UserSearchItem(
     ) {
         Box(modifier = Modifier.size(52.dp)) {
             AsyncImage(
-                model = user.avatarUrl ?: "",
+                model = user.avatarUrl,
                 contentDescription = displayName,
                 modifier = Modifier
                     .fillMaxSize()
@@ -276,7 +286,7 @@ fun UserSearchItem(
 
 @Composable
 fun AddConversationDialog(
-    searchedUsers: List<UserDto>,
+    searchedUsers: List<User>,
     onDismiss: () -> Unit,
     onSearch: (String) -> Unit,
     onSelectUser: (String) -> Unit
@@ -334,7 +344,7 @@ fun AddConversationDialog(
                                 .weight(1f)
                         ) {
                             items(searchedUsers) { user ->
-                                val displayName = user.effectiveName
+                                val displayName = user.name
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -343,7 +353,7 @@ fun AddConversationDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     AsyncImage(
-                                        model = user.avatarUrl ?: "",
+                                        model = user.avatarUrl,
                                         contentDescription = displayName,
                                         modifier = Modifier
                                             .size(40.dp)
@@ -420,7 +430,7 @@ fun ConversationItem(
                     .fillMaxSize()
                     .clip(CircleShape)
             )
-            if (conversation.recipient.isOnline) {
+            if (conversation.recipient.isActuallyOnline) {
                 Box(
                     modifier = Modifier
                         .size(12.dp)

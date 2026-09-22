@@ -1,16 +1,16 @@
 package com.luno.core.data.repository
 
+import com.luno.core.data.datasource.ConversationRemoteDataSource
+import com.luno.core.data.mapper.MessageMapper
+import com.luno.core.data.mapper.UserMapper
+import com.luno.core.data.model.MessageDto
+import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.Message
+import com.luno.core.domain.model.User
 import com.luno.core.domain.repository.ConversationRepository
-import com.luno.core.model.Conversation
-import com.luno.core.model.Message
-import com.luno.core.model.User
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
-import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,161 +22,57 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
-import java.util.UUID
 
 class ConversationRepositoryImpl(
-    private val supabaseClient: SupabaseClient
+    private val remoteDataSource: ConversationRemoteDataSource
 ) : ConversationRepository {
 
     private val _conversationsFlow = MutableStateFlow<List<Conversation>>(emptyList())
     override val conversationsFlow: Flow<List<Conversation>> = _conversationsFlow.asStateFlow()
 
-    // Shared instead of a fresh CoroutineScope(Dispatchers.IO) per call, so every
-    // background task started by this repository can be reasoned about/cancelled together.
-    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private val _messagesFlowMap = mutableMapOf<String, MutableStateFlow<List<Message>>>()
-    private val _messageChannels = mutableMapOf<String, RealtimeChannel>()
     private val _messageJobs = mutableMapOf<String, Job>()
+    private val _messageChannels = mutableMapOf<String, RealtimeChannel>()
 
-    private fun parseTimestamp(timestampStr: String?): Long {
-        if (timestampStr.isNullOrBlank()) return System.currentTimeMillis()
-        val formats = listOf(
-            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-            "yyyy-MM-dd'T'HH:mm:ssX",
-            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss'Z'"
-        )
-        for (format in formats) {
-            try {
-                val sdf = SimpleDateFormat(format, Locale.US).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }
-                val date = sdf.parse(timestampStr)
-                if (date != null) return date.time
-            } catch (_: Exception) {
-            }
-        }
-        return System.currentTimeMillis()
-    }
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var userStatusChannelJob: Job? = null
 
     override suspend fun fetchConversations() {
         try {
-            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
-            if (currentUserId == null) {
-                _conversationsFlow.value = emptyList()
-                return
-            }
-
-            val memberships = supabaseClient.postgrest["conversation_members"]
-                .select {
-                    filter {
-                        eq("user_id", currentUserId)
-                    }
-                }.decodeList<JsonObject>()
-
-            val convIds = memberships.mapNotNull { it["conversation_id"]?.jsonPrimitive?.content }
+            val currentUserId = remoteDataSource.getCurrentUserId() ?: return
+            val convIds = remoteDataSource.fetchMemberships(currentUserId)
             if (convIds.isEmpty()) {
                 _conversationsFlow.value = emptyList()
+                subscribeToUserStatus()
                 return
             }
 
-            val conversationsData = supabaseClient.postgrest["conversations"]
-                .select {
-                    filter {
-                        isIn("id", convIds)
-                    }
-                }.decodeList<JsonObject>()
+            val conversationsData = remoteDataSource.fetchConversationsData(convIds)
+            val conversationList = mutableListOf<Conversation>()
 
-            // One bulk request for every membership row across all conversations,
-            // instead of one request per conversation (avoids N+1 round trips).
-            val membersByConversation: Map<String, List<String>> = supabaseClient
-                .postgrest["conversation_members"]
-                .select {
-                    filter {
-                        isIn("conversation_id", convIds)
-                    }
-                }.decodeList<JsonObject>()
-                .groupBy(
-                    keySelector = { it["conversation_id"]?.jsonPrimitive?.content ?: "" },
-                    valueTransform = { it["user_id"]?.jsonPrimitive?.content ?: "" }
-                )
+            for (convJson in conversationsData) {
+                val convId = convJson["id"]?.jsonPrimitive?.content ?: continue
+                val type = convJson["type"]?.jsonPrimitive?.content ?: "direct"
+                val title = convJson["title"]?.jsonPrimitive?.content ?: ""
+                val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.content ?: ""
 
-            // For each direct conversation, figure out who the other participant is,
-            // then fetch all of those users in a single bulk request.
-            val otherUserIdByConversation = conversationsData.mapNotNull { convJson ->
-                val convId = convJson["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val type = convJson["type"]?.jsonPrimitive?.contentOrNull ?: "direct"
-                if (type != "direct") return@mapNotNull null
-                val otherUserId = membersByConversation[convId]
-                    ?.firstOrNull { it.isNotBlank() && it != currentUserId }
-                    ?: return@mapNotNull null
-                convId to otherUserId
-            }.toMap()
-
-            val usersById: Map<String, JsonObject> = if (otherUserIdByConversation.isNotEmpty()) {
-                supabaseClient.postgrest["users"]
-                    .select {
-                        filter {
-                            isIn("id", otherUserIdByConversation.values.distinct())
-                        }
-                    }.decodeList<JsonObject>()
-                    .associateBy { it["id"]?.jsonPrimitive?.content ?: "" }
-            } else {
-                emptyMap()
-            }
-
-            // Same idea for the "last message" preview: one bulk request for all of them.
-            val lastMsgIdByConversation = conversationsData.mapNotNull { convJson ->
-                val convId = convJson["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val lastMsgId =
-                    convJson["last_message_id"]?.jsonPrimitive?.contentOrNull
-                        ?: return@mapNotNull null
-                convId to lastMsgId
-            }.toMap()
-
-            val messagesById: Map<String, JsonObject> = if (lastMsgIdByConversation.isNotEmpty()) {
-                supabaseClient.postgrest["messages"]
-                    .select {
-                        filter {
-                            isIn("id", lastMsgIdByConversation.values.distinct())
-                        }
-                    }.decodeList<JsonObject>()
-                    .associateBy { it["id"]?.jsonPrimitive?.content ?: "" }
-            } else {
-                emptyMap()
-            }
-
-            val conversationList = conversationsData.mapNotNull { convJson ->
-                val convId = convJson["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val type = convJson["type"]?.jsonPrimitive?.contentOrNull ?: "direct"
-                val title = convJson["title"]?.jsonPrimitive?.contentOrNull ?: ""
-                val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
+                val members = remoteDataSource.fetchConversationMembers(convId)
+                val otherMemberIds = members
+                    .mapNotNull { it["user_id"]?.jsonPrimitive?.content }
+                    .filter { it != currentUserId }
 
                 var recipient =
                     User(id = "", name = title.ifBlank { "Người dùng" }, avatarUrl = avatarUrl)
-                val otherUserId = otherUserIdByConversation[convId]
-                if (type == "direct" && otherUserId != null) {
-                    usersById[otherUserId]?.let { userRecord ->
-                        val name = userRecord["display_name"]?.jsonPrimitive?.contentOrNull
-                            ?: userRecord["name"]?.jsonPrimitive?.contentOrNull
-                            ?: userRecord["email"]?.jsonPrimitive?.contentOrNull
-                            ?: "Người dùng"
-                        val userAvatar =
-                            userRecord["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
-                        recipient = User(id = otherUserId, name = name, avatarUrl = userAvatar)
+                if (type == "direct" && otherMemberIds.isNotEmpty()) {
+                    val otherUserId = otherMemberIds.first()
+                    val userDto = remoteDataSource.fetchUserRecord(otherUserId)
+                    if (userDto != null) {
+                        recipient = UserMapper.mapToDomain(userDto)
                     }
                 }
 
+                val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.content
                 var lastMessage = Message(
                     id = "m_default",
                     senderId = "",
@@ -184,32 +80,72 @@ class ConversationRepositoryImpl(
                     timestamp = System.currentTimeMillis(),
                     isRead = true
                 )
-                lastMsgIdByConversation[convId]?.let { lastMsgId ->
-                    messagesById[lastMsgId]?.let { msgRecord ->
-                        val msgId = msgRecord["id"]?.jsonPrimitive?.content ?: ""
-                        val senderId = msgRecord["sender_id"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val content = msgRecord["content"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val createdAt = msgRecord["created_at"]?.jsonPrimitive?.contentOrNull
-                        lastMessage = Message(
-                            id = msgId,
-                            senderId = senderId,
-                            text = content,
-                            timestamp = parseTimestamp(createdAt),
-                            isRead = true
-                        )
+
+                if (!lastMsgId.isNullOrBlank()) {
+                    val msgDto = remoteDataSource.fetchMessageRecord(lastMsgId)
+                    if (msgDto != null) {
+                        lastMessage = MessageMapper.mapToDomain(msgDto)
                     }
                 }
 
-                Conversation(
-                    id = convId,
-                    recipient = recipient,
-                    lastMessage = lastMessage,
-                    unreadCount = 0,
-                    isPinned = false
+                conversationList.add(
+                    Conversation(
+                        id = convId,
+                        recipient = recipient,
+                        lastMessage = lastMessage,
+                        unreadCount = 0,
+                        isPinned = false
+                    )
                 )
             }
 
             _conversationsFlow.value = conversationList
+            subscribeToUserStatus()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun subscribeToUserStatus() {
+        if (userStatusChannelJob != null) return
+        try {
+            val channel = remoteDataSource.createUserStatusChannel()
+            userStatusChannelJob =
+                channel.postgresChangeFlow<PostgresAction.Update>(schema = "public") {
+                    table = "users"
+                }.onEach { update ->
+                    val record = update.record
+                    val userId = record["id"]?.jsonPrimitive?.content ?: return@onEach
+                    val isOnline = record["is_online"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                    val lastSeenAt = record["last_seen_at"]?.jsonPrimitive?.content
+
+                    val currentConvs = _conversationsFlow.value.toMutableList()
+                    var updated = false
+                    for (i in currentConvs.indices) {
+                        if (currentConvs[i].recipient.id == userId) {
+                            val recipient = currentConvs[i].recipient.copy(
+                                isOnline = isOnline,
+                                lastSeenAt = lastSeenAt
+                            )
+                            currentConvs[i] = currentConvs[i].copy(recipient = recipient)
+                            updated = true
+                        }
+                    }
+                    if (updated) {
+                        _conversationsFlow.value = currentConvs
+                    }
+                }.launchIn(repositoryScope)
+
+            channel.subscribe()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun updateOnlineStatus(isOnline: Boolean) {
+        try {
+            val currentUserId = remoteDataSource.getCurrentUserId() ?: return
+            remoteDataSource.updateOnlineStatus(currentUserId, isOnline)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -217,91 +153,23 @@ class ConversationRepositoryImpl(
 
     override suspend fun startConversation(recipientId: String): Result<String> {
         return try {
-            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            val currentUserId = remoteDataSource.getCurrentUserId()
                 ?: return Result.failure(Exception("Not logged in"))
 
-            val myConvs = supabaseClient.postgrest["conversation_members"]
-                .select {
-                    filter {
-                        eq("user_id", currentUserId)
-                    }
-                }.decodeList<JsonObject>()
-                .mapNotNull { it["conversation_id"]?.jsonPrimitive?.content }
-
-            if (myConvs.isNotEmpty()) {
-                val sharedConvs = supabaseClient.postgrest["conversation_members"]
-                    .select {
-                        filter {
-                            eq("user_id", recipientId)
-                            isIn("conversation_id", myConvs)
-                        }
-                    }.decodeList<JsonObject>()
-                    .mapNotNull { it["conversation_id"]?.jsonPrimitive?.content }
-
-                for (convId in sharedConvs) {
-                    val conv = supabaseClient.postgrest["conversations"]
-                        .select {
-                            filter {
-                                eq("id", convId)
-                                eq("type", "direct")
-                            }
-                        }.decodeSingleOrNull<JsonObject>()
-                    if (conv != null) {
-                        return Result.success(convId)
-                    }
-                }
+            val existingConvId =
+                remoteDataSource.findExistingDirectConversation(currentUserId, recipientId)
+            if (existingConvId != null) {
+                return Result.success(existingConvId)
             }
 
-            // Fetch recipient user info for immediate local caching
-            val userRecord = supabaseClient.postgrest["users"]
-                .select {
-                    filter {
-                        eq("id", recipientId)
-                    }
-                }.decodeSingleOrNull<JsonObject>()
+            val userDto = remoteDataSource.fetchUserRecord(recipientId)
+            val recipient = if (userDto != null) {
+                UserMapper.mapToDomain(userDto)
+            } else {
+                User(id = recipientId, name = "Người dùng", avatarUrl = "")
+            }
 
-            val recipientName = userRecord?.let {
-                it["display_name"]?.jsonPrimitive?.content
-                    ?: it["name"]?.jsonPrimitive?.content
-                    ?: it["email"]?.jsonPrimitive?.content
-                    ?: "Người dùng"
-            } ?: "Người dùng"
-            val recipientAvatar = userRecord?.get("avatar_url")?.jsonPrimitive?.content ?: ""
-            val recipient =
-                User(id = recipientId, name = recipientName, avatarUrl = recipientAvatar)
-
-            // Generate the id ourselves instead of insert().select().decodeSingle(): reading
-            // the row back right after insert needs a SELECT policy that treats us as a
-            // member, but we aren't one yet at this point (that happens right below) - so
-            // insert+select can be rejected by RLS before we ever get to add ourselves.
-            val newConvId = UUID.randomUUID().toString()
-            supabaseClient.postgrest["conversations"]
-                .insert(
-                    JsonObject(
-                        mapOf(
-                            "id" to JsonPrimitive(newConvId),
-                            "type" to JsonPrimitive("direct")
-                        )
-                    )
-                )
-
-            supabaseClient.postgrest["conversation_members"]
-                .insert(
-                    listOf(
-                        JsonObject(
-                            mapOf(
-                                "conversation_id" to JsonPrimitive(newConvId),
-                                "user_id" to JsonPrimitive(currentUserId)
-                            )
-                        ),
-                        JsonObject(
-                            mapOf(
-                                "conversation_id" to JsonPrimitive(newConvId),
-                                "user_id" to JsonPrimitive(recipientId)
-                            )
-                        )
-                    )
-                )
+            val newConvId = remoteDataSource.createDirectConversation(currentUserId, recipientId)
 
             val newConversation = Conversation(
                 id = newConvId,
@@ -334,26 +202,16 @@ class ConversationRepositoryImpl(
         getConversation(convId)?.let { return it }
         return try {
             val currentUserId =
-                supabaseClient.auth.currentUserOrNull()?.id ?: return fallbackConversation(convId)
+                remoteDataSource.getCurrentUserId() ?: return fallbackConversation(convId)
 
-            val convJson = supabaseClient.postgrest["conversations"]
-                .select {
-                    filter {
-                        eq("id", convId)
-                    }
-                }.decodeSingleOrNull<JsonObject>() ?: return fallbackConversation(convId)
+            val conversationsData = remoteDataSource.fetchConversationsData(listOf(convId))
+            val convJson = conversationsData.firstOrNull() ?: return fallbackConversation(convId)
 
-            val type = convJson["type"]?.jsonPrimitive?.contentOrNull ?: "direct"
-            val title = convJson["title"]?.jsonPrimitive?.contentOrNull ?: ""
-            val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
+            val type = convJson["type"]?.jsonPrimitive?.content ?: "direct"
+            val title = convJson["title"]?.jsonPrimitive?.content ?: ""
+            val avatarUrl = convJson["avatar_url"]?.jsonPrimitive?.content ?: ""
 
-            val members = supabaseClient.postgrest["conversation_members"]
-                .select {
-                    filter {
-                        eq("conversation_id", convId)
-                    }
-                }.decodeList<JsonObject>()
-
+            val members = remoteDataSource.fetchConversationMembers(convId)
             val otherMemberIds = members
                 .mapNotNull { it["user_id"]?.jsonPrimitive?.content }
                 .filter { it != currentUserId }
@@ -362,24 +220,13 @@ class ConversationRepositoryImpl(
                 User(id = "", name = title.ifBlank { "Người dùng" }, avatarUrl = avatarUrl)
             if (type == "direct" && otherMemberIds.isNotEmpty()) {
                 val otherUserId = otherMemberIds.first()
-                val userRecord = supabaseClient.postgrest["users"]
-                    .select {
-                        filter {
-                            eq("id", otherUserId)
-                        }
-                    }.decodeSingleOrNull<JsonObject>()
-
-                if (userRecord != null) {
-                    val name = userRecord["display_name"]?.jsonPrimitive?.contentOrNull
-                        ?: userRecord["name"]?.jsonPrimitive?.contentOrNull
-                        ?: userRecord["email"]?.jsonPrimitive?.contentOrNull
-                        ?: "Người dùng"
-                    val userAvatar = userRecord["avatar_url"]?.jsonPrimitive?.contentOrNull ?: ""
-                    recipient = User(id = otherUserId, name = name, avatarUrl = userAvatar)
+                val userDto = remoteDataSource.fetchUserRecord(otherUserId)
+                if (userDto != null) {
+                    recipient = UserMapper.mapToDomain(userDto)
                 }
             }
 
-            val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.contentOrNull
+            val lastMsgId = convJson["last_message_id"]?.jsonPrimitive?.content
             var lastMessage = Message(
                 id = "m_default",
                 senderId = "",
@@ -389,26 +236,9 @@ class ConversationRepositoryImpl(
             )
 
             if (!lastMsgId.isNullOrBlank()) {
-                val msgRecord = supabaseClient.postgrest["messages"]
-                    .select {
-                        filter {
-                            eq("id", lastMsgId)
-                        }
-                    }.decodeSingleOrNull<JsonObject>()
-
-                if (msgRecord != null) {
-                    val msgId = msgRecord["id"]?.jsonPrimitive?.content ?: ""
-                    val senderId = msgRecord["sender_id"]?.jsonPrimitive?.content ?: ""
-                    val content = msgRecord["content"]?.jsonPrimitive?.content ?: ""
-                    val createdAt = msgRecord["created_at"]?.jsonPrimitive?.content
-                    val timestamp = parseTimestamp(createdAt)
-                    lastMessage = Message(
-                        id = msgId,
-                        senderId = senderId,
-                        text = content,
-                        timestamp = timestamp,
-                        isRead = true
-                    )
+                val msgDto = remoteDataSource.fetchMessageRecord(lastMsgId)
+                if (msgDto != null) {
+                    lastMessage = MessageMapper.mapToDomain(msgDto)
                 }
             }
 
@@ -468,9 +298,20 @@ class ConversationRepositoryImpl(
         }
     }
 
+    private suspend fun fetchMessages(convId: String) {
+        try {
+            val messageDtos = remoteDataSource.fetchMessages(convId)
+            val messages =
+                messageDtos.map { MessageMapper.mapToDomain(it) }.sortedBy { it.timestamp }
+            _messagesFlowMap[convId]?.value = messages
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private suspend fun subscribeToMessages(convId: String) {
         if (_messageChannels.containsKey(convId)) return
-        val channel = supabaseClient.channel("messages:$convId")
+        val channel = remoteDataSource.createMessageChannel(convId)
         _messageChannels[convId] = channel
 
         _messageJobs[convId] =
@@ -479,17 +320,19 @@ class ConversationRepositoryImpl(
                 filter("conversation_id", FilterOperator.EQ, convId)
             }.onEach { insert ->
                 val record = insert.record
-                val id = record["id"]?.jsonPrimitive?.contentOrNull ?: return@onEach
-                val senderId = record["sender_id"]?.jsonPrimitive?.contentOrNull ?: ""
-                val content = record["content"]?.jsonPrimitive?.contentOrNull ?: ""
-                val createdAt = record["created_at"]?.jsonPrimitive?.contentOrNull
-                val message = Message(
+                val id = record["id"]?.jsonPrimitive?.content ?: return@onEach
+                val senderId = record["sender_id"]?.jsonPrimitive?.content ?: ""
+                val content = record["content"]?.jsonPrimitive?.content ?: ""
+                val createdAt = record["created_at"]?.jsonPrimitive?.content
+
+                val messageDto = MessageDto(
                     id = id,
+                    conversationId = convId,
                     senderId = senderId,
-                    text = content,
-                    timestamp = parseTimestamp(createdAt),
-                    isRead = true
+                    content = content,
+                    createdAt = createdAt
                 )
+                val message = MessageMapper.mapToDomain(messageDto)
 
                 val current = _messagesFlowMap[convId]?.value.orEmpty()
                 if (current.none { it.id == id }) {
@@ -507,92 +350,33 @@ class ConversationRepositoryImpl(
         channel.subscribe()
     }
 
-    private suspend fun fetchMessages(convId: String) {
-        try {
-            val messagesData = supabaseClient.postgrest["messages"]
-                .select {
-                    filter {
-                        eq("conversation_id", convId)
-                    }
-                }.decodeList<JsonObject>()
+    override suspend fun sendMessage(convId: String, text: String): Result<Unit> {
+        if (text.isBlank()) return Result.failure(Exception("Message is blank"))
+        val currentUserId = remoteDataSource.getCurrentUserId() ?: "me"
 
-            val messages = messagesData.map { msg ->
-                val id = msg["id"]?.jsonPrimitive?.content ?: ""
-                val senderId = msg["sender_id"]?.jsonPrimitive?.content ?: ""
-                val content = msg["content"]?.jsonPrimitive?.content ?: ""
-                val createdAt = msg["created_at"]?.jsonPrimitive?.content
-                val timestamp = parseTimestamp(createdAt)
-                Message(
-                    id = id,
-                    senderId = senderId,
-                    text = content,
-                    timestamp = timestamp,
-                    isRead = true
-                )
-            }.sortedBy { it.timestamp }
+        return try {
+            val msgDto = remoteDataSource.sendMessageRecord(convId, currentUserId, text)
+            val message = MessageMapper.mapToDomain(msgDto)
 
-            _messagesFlowMap[convId]?.value = messages
+            val list = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
+            if (list.none { it.id == message.id }) {
+                list.add(message)
+                _messagesFlowMap[convId]?.value = list.toList()
+            }
+
+            val currentConvs = _conversationsFlow.value.toMutableList()
+            val index = currentConvs.indexOfFirst { it.id == convId }
+            if (index != -1) {
+                val conv = currentConvs[index]
+                currentConvs[index] = conv.copy(lastMessage = message, unreadCount = 0)
+                _conversationsFlow.value = currentConvs
+            }
+
+            remoteDataSource.updateLastMessageId(convId, message.id)
+            Result.success(Unit)
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-    }
-
-    override fun sendMessage(convId: String, text: String) {
-        if (text.isBlank()) return
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: "me"
-
-        repositoryScope.launch {
-            try {
-                val newMsgJson = supabaseClient.postgrest["messages"]
-                    .insert(
-                        JsonObject(
-                            mapOf(
-                                "conversation_id" to JsonPrimitive(convId),
-                                "sender_id" to JsonPrimitive(currentUserId),
-                                "content" to JsonPrimitive(text),
-                                "type" to JsonPrimitive("text")
-                            )
-                        )
-                    ) {
-                        select()
-                    }.decodeSingle<JsonObject>()
-
-                val msgId =
-                    newMsgJson["id"]?.jsonPrimitive?.content ?: "msg_${System.currentTimeMillis()}"
-                val createdAt = newMsgJson["created_at"]?.jsonPrimitive?.content
-                val timestamp = parseTimestamp(createdAt)
-
-                val newMessage = Message(
-                    id = msgId,
-                    senderId = currentUserId,
-                    text = text,
-                    timestamp = timestamp,
-                    isRead = true
-                )
-
-                val list = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
-                list.add(newMessage)
-                _messagesFlowMap[convId]?.value = list.toList()
-
-                val currentConvs = _conversationsFlow.value.toMutableList()
-                val index = currentConvs.indexOfFirst { it.id == convId }
-                if (index != -1) {
-                    val conv = currentConvs[index]
-                    currentConvs[index] = conv.copy(lastMessage = newMessage, unreadCount = 0)
-                    _conversationsFlow.value = currentConvs
-                }
-
-                supabaseClient.postgrest["conversations"]
-                    .update(
-                        JsonObject(mapOf("last_message_id" to JsonPrimitive(msgId)))
-                    ) {
-                        filter {
-                            eq("id", convId)
-                        }
-                    }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            Result.failure(e)
         }
     }
 
@@ -601,6 +385,6 @@ class ConversationRepositoryImpl(
     }
 
     override fun getCurrentUserId(): String? {
-        return supabaseClient.auth.currentUserOrNull()?.id
+        return remoteDataSource.getCurrentUserId()
     }
 }

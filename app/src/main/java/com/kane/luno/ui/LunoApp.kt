@@ -43,6 +43,7 @@ import com.luno.feature.chat.viewmodels.ChatViewModel
 import com.luno.feature.profile.ProfileViewModel
 import com.luno.feature.profile.navigation.ProfileRoute
 import com.luno.feature.profile.navigation.profileGraph
+import kotlinx.serialization.Serializable
 
 // Navigation Tabs Setup
 enum class TopLevelTab(val title: String, val icon: ImageVector) {
@@ -51,6 +52,9 @@ enum class TopLevelTab(val title: String, val icon: ImageVector) {
     Discover("Khám phá", Icons.Default.CompassCalibration),
     Profile("Cá nhân", Icons.Default.Person)
 }
+
+@Serializable
+data object MainRoute
 
 @Composable
 fun LunoApp(
@@ -97,97 +101,124 @@ fun LunoApp(
         return
     }
 
-    val startDestination = if (userEmail != null) ChatsRoute else LoginRoute
-
+    val startDestination = if (userEmail != null) MainRoute else LoginRoute
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
 
-    // Logic for hiding bottom bar in detail screens
-    val isBottomBarVisible = currentDestination?.hierarchy?.any {
-        (it.route == ChatsRoute::class.qualifiedName) ||
-                (it.route == ProfileRoute::class.qualifiedName) ||
-                (it.route == "Contacts") ||
-                (it.route == "Discover")
-    } == true
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        authGraph(
+            authViewModel = authViewModel,
+            onLoginSuccess = {
+                navController.navigate(MainRoute) {
+                    popUpTo(LoginRoute) { inclusive = true }
+                }
+            }
+        )
+
+        composable<MainRoute> {
+            MainTabScreen(
+                chatViewModel = chatViewModel,
+                profileViewModel = profileViewModel,
+                onNavigateToDetail = { convId ->
+                    navController.navigate(ChatDetailRoute(convId))
+                },
+                onSignedOut = {
+                    navController.navigate(LoginRoute) {
+                        popUpTo(MainRoute) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        chatGraph(
+            viewModel = chatViewModel,
+            onNavigateToDetail = { convId ->
+                navController.navigate(ChatDetailRoute(convId))
+            },
+            onBack = {
+                navController.popBackStack()
+            }
+        )
+    }
+}
+
+@Composable
+fun MainTabScreen(
+    chatViewModel: ChatViewModel,
+    profileViewModel: ProfileViewModel,
+    onNavigateToDetail: (String) -> Unit,
+    onSignedOut: () -> Unit
+) {
+    val tabNavController = rememberNavController()
+    val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (isBottomBarVisible) {
-                NavigationBar {
-                    TopLevelTab.entries.forEach { tab ->
-                        val isSelected = when (tab) {
-                            TopLevelTab.Chats -> currentDestination.hierarchy.any { it.route == ChatsRoute::class.qualifiedName }
-                            TopLevelTab.Profile -> currentDestination.hierarchy.any { it.route == ProfileRoute::class.qualifiedName }
-                            else -> currentDestination.hierarchy.any { it.route == tab.name }
-                        }
-
-                        NavigationBarItem(
-                            icon = { Icon(tab.icon, contentDescription = tab.title) },
-                            label = { Text(tab.title) },
-                            selected = isSelected,
-                            onClick = {
-                                when (tab) {
-                                    TopLevelTab.Chats -> navController.navigate(ChatsRoute) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                    TopLevelTab.Profile -> navController.navigate(ProfileRoute) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                    else -> navController.navigate(tab.name) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                        )
+            NavigationBar {
+                TopLevelTab.entries.forEach { tab ->
+                    val isSelected = when (tab) {
+                        TopLevelTab.Chats -> currentDestination?.hierarchy?.any { it.route == ChatsRoute::class.qualifiedName } == true
+                        TopLevelTab.Profile -> currentDestination?.hierarchy?.any { it.route == ProfileRoute::class.qualifiedName } == true
+                        else -> currentDestination?.hierarchy?.any { it.route == tab.name } == true
                     }
+
+                    NavigationBarItem(
+                        icon = { Icon(tab.icon, contentDescription = tab.title) },
+                        label = { Text(tab.title) },
+                        selected = isSelected,
+                        onClick = {
+                            when (tab) {
+                                TopLevelTab.Chats -> tabNavController.navigate(ChatsRoute) {
+                                    popUpTo(tabNavController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                TopLevelTab.Profile -> tabNavController.navigate(ProfileRoute) {
+                                    popUpTo(tabNavController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                else -> tabNavController.navigate(tab.name) {
+                                    popUpTo(tabNavController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
     ) { paddingValues ->
         NavHost(
-            navController = navController,
-            startDestination = startDestination,
+            navController = tabNavController,
+            startDestination = ChatsRoute,
             modifier = Modifier.padding(paddingValues)
         ) {
-            authGraph(
-                authViewModel = authViewModel,
-                onLoginSuccess = {
-                    navController.navigate(ChatsRoute) {
-                        popUpTo(LoginRoute) { inclusive = true }
-                    }
-                }
-            )
-
             chatGraph(
                 viewModel = chatViewModel,
-                onNavigateToDetail = { convId ->
-                    navController.navigate(ChatDetailRoute(convId))
-                },
-                onBack = {
-                    navController.popBackStack()
-                }
+                onNavigateToDetail = onNavigateToDetail,
+                onBack = { }
             )
 
             profileGraph(
                 viewModel = profileViewModel,
-                onSignedOut = {
-                    navController.navigate(LoginRoute) {
-                        popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
-                    }
-                }
+                onSignedOut = onSignedOut
             )
 
-            // Mock other routes
             composable("Contacts") { PlaceholderScreen("Danh bạ") }
             composable("Discover") { PlaceholderScreen("Khám phá") }
         }

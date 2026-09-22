@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -46,12 +47,14 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    implementation(project(":core:model"))
     implementation(project(":core:domain"))
     implementation(project(":core:network"))
-    implementation(project(":core:datastore"))
     implementation(project(":core:utils"))
+    implementation(libs.kotlinx.serialization.json)
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.gotrue.kt)
     implementation(libs.supabase.postgrest.kt)
+    implementation(libs.supabase.realtime.kt)
+
+    implementation(libs.androidx.datastore.preferences)
 }
