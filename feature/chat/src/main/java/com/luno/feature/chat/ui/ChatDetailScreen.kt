@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -49,9 +49,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import com.kane.luno.utils.DateUtils
 import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.Message
 import kotlinx.coroutines.launch
@@ -77,9 +83,18 @@ fun ChatDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        val context = LocalContext.current
+                        val avatarRequest = remember(conversation) {
+                            ImageRequest.Builder(context)
+                                .data(conversation.recipient.avatarUrl)
+                                .crossfade(true)
+                                .memoryCachePolicy(policy = CachePolicy.ENABLED)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                        }
                         Box(modifier = Modifier.size(38.dp)) {
                             AsyncImage(
-                                model = conversation.recipient.avatarUrl,
+                                model = avatarRequest,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -215,14 +230,55 @@ fun ChatDetailScreen(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(
-                    start = 16.dp + paddingValues.calculateStartPadding(layoutDirection),
-                    end = 16.dp + paddingValues.calculateEndPadding(layoutDirection),
-                    top = paddingValues.calculateTopPadding(),
-                    bottom = paddingValues.calculateBottomPadding()
-                )
+                    start = 12.dp + paddingValues.calculateStartPadding(layoutDirection),
+                    end = 12.dp + paddingValues.calculateEndPadding(layoutDirection),
+                    top = 8.dp + paddingValues.calculateTopPadding(),
+                    bottom = 8.dp + paddingValues.calculateBottomPadding()
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(messages) { message ->
-                    MessageBubble(message = message, currentUserId = currentUserId)
+                for (i in messages.indices) {
+                    val message = messages[i]
+                    val prevMessage = if (i > 0) messages[i - 1] else null
+                    val showDateHeader = prevMessage == null || !DateUtils.isSameDay(
+                        prevMessage.timestamp,
+                        message.timestamp
+                    )
+
+                    if (showDateHeader) {
+                        item(key = "date_${message.timestamp}_$i") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                                ) {
+                                    Text(
+                                        text = DateUtils.formatHeaderDate(message.timestamp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 4.dp
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = message.id) {
+                        val isMe = message.senderId == currentUserId || message.senderId == "me"
+                        MessageBubble(
+                            message = message,
+                            isMe = isMe,
+                            recipientAvatarUrl = conversation.recipient.avatarUrl
+                        )
+                    }
                 }
             }
         }
@@ -230,27 +286,84 @@ fun ChatDetailScreen(
 }
 
 @Composable
-fun MessageBubble(message: Message, currentUserId: String?) {
-    val isMe = message.senderId == currentUserId || message.senderId == "me"
+fun MessageBubble(
+    message: Message,
+    isMe: Boolean,
+    recipientAvatarUrl: String
+) {
+
+    val context = LocalContext.current
+    val avatarRequest = remember(recipientAvatarUrl) {
+        ImageRequest.Builder(context)
+            .data(recipientAvatarUrl)
+            .crossfade(true)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+    val formattedTime = DateUtils.formatMessageTime(message.timestamp)
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
+        if (!isMe) {
+            AsyncImage(
+                model = avatarRequest,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+
         Surface(
             modifier = Modifier.widthIn(max = 280.dp),
             color = if (isMe) {
-                MaterialTheme.colorScheme.primaryContainer
+                Color(0xFFE3F2FD)
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surface
             },
-            shape = MaterialTheme.shapes.medium,
+            tonalElevation = if (isMe) 0.dp else 1.dp,
+            shadowElevation = if (isMe) 0.dp else 1.dp,
+            shape = if (isMe) {
+                RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 4.dp
+                )
+            } else {
+                RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 4.dp,
+                    bottomEnd = 16.dp
+                )
+            }
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = message.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = formattedTime,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = if (isMe) Color(0xFF1565C0).copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = 0.7f
+                    ),
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
         }
     }
 }
