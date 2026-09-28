@@ -33,13 +33,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kane.luno.di.AppModule
+import com.kane.luno.ui.permission.NotificationPermissionEffect
 import com.luno.core.auth.navigation.LoginRoute
 import com.luno.core.auth.navigation.authGraph
 import com.luno.core.auth.ui.AuthViewModel
 import com.luno.feature.chat.navigation.ChatDetailRoute
 import com.luno.feature.chat.navigation.ChatsRoute
+import com.luno.feature.chat.navigation.SearchRoute
 import com.luno.feature.chat.navigation.chatGraph
 import com.luno.feature.chat.viewmodels.ChatViewModel
+import com.luno.feature.chat.viewmodels.SearchViewModel
 import com.luno.feature.profile.ProfileViewModel
 import com.luno.feature.profile.navigation.ProfileRoute
 import com.luno.feature.profile.navigation.profileGraph
@@ -69,6 +72,17 @@ fun LunoApp(
             }
         }
     ),
+    searchViewModel: SearchViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return SearchViewModel(
+                    AppModule.conversationRepository,
+                    AppModule.userRepository
+                ) as T
+            }
+        }
+    )
 ) {
     val authViewModel: AuthViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
@@ -121,6 +135,7 @@ fun LunoApp(
         composable<MainRoute> {
             MainTabScreen(
                 chatViewModel = chatViewModel,
+                searchViewModel = searchViewModel,
                 profileViewModel = profileViewModel,
                 onNavigateToDetail = { convId ->
                     navController.navigate(ChatDetailRoute(convId))
@@ -135,8 +150,12 @@ fun LunoApp(
 
         chatGraph(
             viewModel = chatViewModel,
+            searchViewModel = searchViewModel,
             onNavigateToDetail = { convId ->
                 navController.navigate(ChatDetailRoute(convId))
+            },
+            onNavigateToSearch = {
+                navController.navigate(SearchRoute)
             },
             onBack = {
                 navController.popBackStack()
@@ -148,10 +167,13 @@ fun LunoApp(
 @Composable
 fun MainTabScreen(
     chatViewModel: ChatViewModel,
+    searchViewModel: SearchViewModel,
     profileViewModel: ProfileViewModel,
     onNavigateToDetail: (String) -> Unit,
     onSignedOut: () -> Unit
 ) {
+    NotificationPermissionEffect()
+
     val tabNavController = rememberNavController()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -210,8 +232,12 @@ fun MainTabScreen(
         ) {
             chatGraph(
                 viewModel = chatViewModel,
+                searchViewModel = searchViewModel,
                 onNavigateToDetail = onNavigateToDetail,
-                onBack = { }
+                onNavigateToSearch = {
+                    tabNavController.navigate(SearchRoute)
+                },
+                onBack = { tabNavController.popBackStack() }
             )
 
             profileGraph(

@@ -283,9 +283,11 @@ class ConversationRepositoryImpl(
         if (!_messagesFlowMap.containsKey(convId)) {
             _messagesFlowMap[convId] = MutableStateFlow(emptyList())
             repositoryScope.launch {
-                fetchMessages(convId)
                 subscribeToMessages(convId)
             }
+        }
+        repositoryScope.launch {
+            fetchMessages(convId)
         }
         return _messagesFlowMap[convId]!!.asStateFlow()
     }

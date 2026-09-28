@@ -1,6 +1,7 @@
 package com.luno.feature.chat.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,11 +19,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -49,17 +48,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.kane.luno.utils.DateUtils
 import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.Message
+import com.luno.feature.chat.ui.components.MessageBubble
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,11 +71,18 @@ fun ChatDetailScreen(
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = {
+                focusManager.clearFocus()
+            })
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -285,85 +292,4 @@ fun ChatDetailScreen(
     }
 }
 
-@Composable
-fun MessageBubble(
-    message: Message,
-    isMe: Boolean,
-    recipientAvatarUrl: String
-) {
 
-    val context = LocalContext.current
-    val avatarRequest = remember(recipientAvatarUrl) {
-        ImageRequest.Builder(context)
-            .data(recipientAvatarUrl)
-            .crossfade(true)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .build()
-    }
-    val formattedTime = DateUtils.formatMessageTime(message.timestamp)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        if (!isMe) {
-            AsyncImage(
-                model = avatarRequest,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-        }
-
-        Surface(
-            modifier = Modifier.widthIn(max = 280.dp),
-            color = if (isMe) {
-                Color(0xFFE3F2FD)
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-            tonalElevation = if (isMe) 0.dp else 1.dp,
-            shadowElevation = if (isMe) 0.dp else 1.dp,
-            shape = if (isMe) {
-                RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomStart = 16.dp,
-                    bottomEnd = 4.dp
-                )
-            } else {
-                RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomStart = 4.dp,
-                    bottomEnd = 16.dp
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = formattedTime,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = if (isMe) Color(0xFF1565C0).copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = 0.7f
-                    ),
-                    modifier = Modifier.align(Alignment.End)
-                )
-            }
-        }
-    }
-}

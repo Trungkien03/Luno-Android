@@ -27,6 +27,8 @@ Thumbs.db
 *.keystore
 secrets.properties
 google-services.json
+supabase/service-account.json
+**/service-account.json
 
 # Temporary & Log files
 *.log
