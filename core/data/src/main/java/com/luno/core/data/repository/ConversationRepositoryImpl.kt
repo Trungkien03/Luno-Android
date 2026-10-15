@@ -1,6 +1,7 @@
 package com.luno.core.data.repository
 
 import com.luno.core.data.datasource.ConversationRemoteDataSource
+import com.luno.core.data.datasource.MediaRemoteDataSource
 import com.luno.core.data.local.dao.ConversationDao
 import com.luno.core.data.local.dao.MessageDao
 import com.luno.core.data.mapper.EntityMappers.toDomain
@@ -35,7 +36,8 @@ import java.util.UUID
 class ConversationRepositoryImpl(
     private val remoteDataSource: ConversationRemoteDataSource,
     private val conversationDao: ConversationDao? = null,
-    private val messageDao: MessageDao? = null
+    private val messageDao: MessageDao? = null,
+    private val mediaRemoteDataSource: MediaRemoteDataSource? = null
 ) : ConversationRepository {
 
     private val _conversationsFlow = MutableStateFlow<List<Conversation>>(emptyList())
@@ -69,7 +71,10 @@ class ConversationRepositoryImpl(
                     mediaUrl = msgEntity.mediaUrl,
                     mediaType = msgEntity.mediaType,
                     fileName = msgEntity.fileName,
-                    fileSize = msgEntity.fileSize
+                    fileSize = msgEntity.fileSize,
+                    replyToId = msgEntity.replyToId,
+                    replyToText = msgEntity.replyToText,
+                    replyToSender = msgEntity.replyToSender
                 )
                 val sentMsg = MessageMapper.mapToDomain(msgDto)
                 messageDao?.deleteMessage(msgEntity.id)
@@ -395,6 +400,10 @@ class ConversationRepositoryImpl(
                 val mediaTypeStr = record["media_type"]?.jsonPrimitive?.content ?: "TEXT"
                 val fileName = record["file_name"]?.jsonPrimitive?.content
                 val fileSize = record["file_size"]?.jsonPrimitive?.content
+                val replyToId = record["reply_to_id"]?.jsonPrimitive?.content
+                val replyToText = record["reply_to_text"]?.jsonPrimitive?.content
+                val replyToSender = record["reply_to_sender"]?.jsonPrimitive?.content
+                val isUnsent = record["is_unsent"]?.jsonPrimitive?.content?.toBoolean() ?: false
 
                 val messageDto = MessageDto(
                     id = id,
@@ -405,7 +414,11 @@ class ConversationRepositoryImpl(
                     mediaUrl = mediaUrl,
                     mediaType = mediaTypeStr,
                     fileName = fileName,
-                    fileSize = fileSize
+                    fileSize = fileSize,
+                    replyToId = replyToId,
+                    replyToText = replyToText,
+                    replyToSender = replyToSender,
+                    isUnsent = isUnsent
                 )
                 val message = MessageMapper.mapToDomain(messageDto)
 
@@ -447,7 +460,10 @@ class ConversationRepositoryImpl(
         mediaUrl: String,
         mediaType: MediaType,
         fileName: String?,
-        fileSize: String?
+        fileSize: String?,
+        replyToId: String?,
+        replyToText: String?,
+        replyToSender: String?
     ): Result<Unit> {
         val currentUserId = remoteDataSource.getCurrentUserId() ?: "me"
         val tempMsgId = "pending_${UUID.randomUUID()}"
@@ -461,7 +477,10 @@ class ConversationRepositoryImpl(
             mediaUrl = mediaUrl.ifBlank { null },
             mediaType = mediaType,
             fileName = fileName,
-            fileSize = fileSize
+            fileSize = fileSize,
+            replyToMessageId = replyToId,
+            replyToText = replyToText,
+            replyToSenderName = replyToSender
         )
 
         if (messageDao != null) {
@@ -480,7 +499,10 @@ class ConversationRepositoryImpl(
                 mediaUrl = mediaUrl,
                 mediaType = mediaType.name,
                 fileName = fileName,
-                fileSize = fileSize
+                fileSize = fileSize,
+                replyToId = replyToId,
+                replyToText = replyToText,
+                replyToSender = replyToSender
             )
             val sentMessage = MessageMapper.mapToDomain(msgDto)
 
@@ -505,6 +527,62 @@ class ConversationRepositoryImpl(
             }
 
             remoteDataSource.updateLastMessageId(convId, sentMessage.id)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun unsendMessage(convId: String, messageId: String): Result<Unit> {
+        val targetMessage = _messagesFlowMap[convId]?.value?.find { it.id == messageId }
+            ?: messageDao?.getMessagesForConversationOnce(convId)?.map { it.toDomain() }
+                ?.find { it.id == messageId }
+
+        if (targetMessage != null) {
+            val ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L
+            if (System.currentTimeMillis() - targetMessage.timestamp > ONE_DAY_MILLIS) {
+                return Result.failure(Exception("Không thể thu hồi tin nhắn đã gửi quá 24 giờ"))
+            }
+
+            val mediaUrl = targetMessage.mediaUrl
+            if (!mediaUrl.isNullOrBlank()) {
+                val bucketName = when (targetMessage.mediaType) {
+                    MediaType.IMAGE -> "chat-images"
+                    MediaType.AUDIO -> "chat-audio"
+                    MediaType.FILE -> "chat-files"
+                    else -> "chat-media"
+                }
+                repositoryScope.launch {
+                    try {
+                        mediaRemoteDataSource?.deleteFile(mediaUrl, bucketName)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+
+        return try {
+            remoteDataSource.unsendMessageRecord(messageId)
+
+            val unsentText = "Tin nhắn đã được thu hồi"
+            val currentMessages = _messagesFlowMap[convId]?.value.orEmpty().map { msg ->
+                if (msg.id == messageId) {
+                    val unsentMsg = msg.copy(
+                        text = unsentText,
+                        isUnsent = true,
+                        mediaUrl = null,
+                        fileName = null,
+                        fileSize = null
+                    )
+                    if (messageDao != null) {
+                        repositoryScope.launch { messageDao.upsertMessage(unsentMsg.toEntity(convId)) }
+                    }
+                    unsentMsg
+                } else msg
+            }
+            _messagesFlowMap[convId]?.value = currentMessages
+
             Result.success(Unit)
         } catch (e: Exception) {
             e.printStackTrace()

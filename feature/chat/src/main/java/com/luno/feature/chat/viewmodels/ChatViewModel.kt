@@ -42,6 +42,9 @@ class ChatViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _replyingMessage = MutableStateFlow<Message?>(null)
+    val replyingMessage: StateFlow<Message?> = _replyingMessage.asStateFlow()
+
     init {
         refreshConversations()
     }
@@ -114,6 +117,7 @@ class ChatViewModel(
     fun selectConversation(convId: String?) {
         val previousId = _selectedConversationId.value
         _selectedConversationId.value = convId
+        _replyingMessage.value = null
         messagesJob?.cancel()
         if (previousId != null && previousId != convId) {
             conversationRepository.stopObservingMessages(previousId)
@@ -132,6 +136,10 @@ class ChatViewModel(
         }
     }
 
+    fun setReplyingMessage(message: Message?) {
+        _replyingMessage.value = message
+    }
+
     override fun onCleared() {
         super.onCleared()
         _selectedConversationId.value?.let { conversationRepository.stopObservingMessages(it) }
@@ -139,8 +147,39 @@ class ChatViewModel(
 
     fun sendMessage(text: String) {
         val convId = _selectedConversationId.value ?: return
+        val reply = _replyingMessage.value
         viewModelScope.launch {
-            conversationRepository.sendMessage(convId, text)
+            if (reply != null) {
+                val recipientName =
+                    if (reply.senderId == currentUserId) "Bạn" else currentConversation.value?.recipient?.name
+                        ?: "Người dùng"
+                conversationRepository.sendMediaMessage(
+                    convId = convId,
+                    text = text,
+                    mediaUrl = "",
+                    mediaType = MediaType.TEXT,
+                    replyToId = reply.id,
+                    replyToText = reply.text.ifBlank {
+                        when (reply.mediaType) {
+                            MediaType.IMAGE -> "[Hình ảnh]"
+                            MediaType.AUDIO -> "[Ghi âm]"
+                            MediaType.FILE -> "[Tệp đính kèm]"
+                            else -> reply.text
+                        }
+                    },
+                    replyToSender = recipientName
+                )
+                _replyingMessage.value = null
+            } else {
+                conversationRepository.sendMessage(convId, text)
+            }
+        }
+    }
+
+    fun unsendMessage(message: Message) {
+        val convId = _selectedConversationId.value ?: return
+        viewModelScope.launch {
+            conversationRepository.unsendMessage(convId, message.id)
         }
     }
 
@@ -151,11 +190,16 @@ class ChatViewModel(
         text: String = ""
     ) {
         val convId = _selectedConversationId.value ?: return
+        val reply = _replyingMessage.value
         viewModelScope.launch {
             _isLoading.value = true
             val uploadResult = mediaRepository?.uploadMedia(bytes, fileName, mediaType)
             val mediaUrl = uploadResult?.getOrNull().orEmpty()
             val sizeFormatted = "${bytes.size / 1024} KB"
+
+            val recipientName =
+                if (reply?.senderId == currentUserId) "Bạn" else currentConversation.value?.recipient?.name
+                    ?: "Người dùng"
 
             conversationRepository.sendMediaMessage(
                 convId = convId,
@@ -170,8 +214,12 @@ class ChatViewModel(
                 mediaUrl = mediaUrl,
                 mediaType = mediaType,
                 fileName = fileName,
-                fileSize = sizeFormatted
+                fileSize = sizeFormatted,
+                replyToId = reply?.id,
+                replyToText = reply?.text,
+                replyToSender = recipientName
             )
+            _replyingMessage.value = null
             _isLoading.value = false
         }
     }

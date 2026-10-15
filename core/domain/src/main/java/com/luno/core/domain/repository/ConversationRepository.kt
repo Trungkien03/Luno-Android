@@ -19,8 +19,13 @@ interface ConversationRepository {
         mediaUrl: String,
         mediaType: MediaType,
         fileName: String? = null,
-        fileSize: String? = null
+        fileSize: String? = null,
+        replyToId: String? = null,
+        replyToText: String? = null,
+        replyToSender: String? = null
     ): Result<Unit>
+
+    suspend fun unsendMessage(convId: String, messageId: String): Result<Unit>
     fun getConversation(convId: String): Conversation?
     fun getCurrentUserId(): String?
     suspend fun updateOnlineStatus(isOnline: Boolean)

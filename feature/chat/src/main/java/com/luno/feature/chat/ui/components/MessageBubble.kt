@@ -1,9 +1,11 @@
 package com.luno.feature.chat.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -144,81 +147,130 @@ fun MessageBubble(
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                when (message.mediaType) {
-                    MediaType.IMAGE -> {
-                        if (!message.mediaUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = message.mediaUrl,
-                                contentDescription = "Hình ảnh",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 200.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                        if (message.text.isNotBlank() && message.text != "[Hình ảnh]") {
-                            Text(
-                                text = message.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    MediaType.AUDIO -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                if (message.isUnsent) {
+                    Text(
+                        text = "Tin nhắn đã được thu hồi",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                } else {
+                    val replyText = message.replyToText
+                    if (!replyText.isNullOrBlank()) {
+                        Surface(
+                            color = if (isMe) Color(0xFFBBDEFB) else MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Ghi âm",
-                                tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Ghi âm " + (message.fileSize ?: ""),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    MediaType.FILE -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.InsertDriveFile,
-                                contentDescription = "Tệp",
-                                tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
-                            )
-                            Column {
-                                Text(
-                                    text = message.fileName ?: "Tệp đính kèm",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(3.dp)
+                                        .height(28.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary,
+                                            RoundedCornerShape(2.dp)
+                                        )
                                 )
-                                val fileSize = message.fileSize
-                                if (!fileSize.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
                                     Text(
-                                        text = fileSize,
+                                        text = message.replyToSenderName ?: "Trả lời",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isMe) Color(0xFF1565C0) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = replyText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         }
                     }
 
-                    else -> {
-                        Text(
-                            text = message.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
-                        )
+                    when (message.mediaType) {
+                        MediaType.IMAGE -> {
+                            if (!message.mediaUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = message.mediaUrl,
+                                    contentDescription = "Hình ảnh",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 200.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                            if (message.text.isNotBlank() && message.text != "[Hình ảnh]") {
+                                Text(
+                                    text = message.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        MediaType.AUDIO -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Ghi âm",
+                                    tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Ghi âm " + (message.fileSize ?: ""),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        MediaType.FILE -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.InsertDriveFile,
+                                    contentDescription = "Tệp",
+                                    tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
+                                )
+                                Column {
+                                    Text(
+                                        text = message.fileName ?: "Tệp đính kèm",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    val fileSize = message.fileSize
+                                    if (!fileSize.isNullOrBlank()) {
+                                        Text(
+                                            text = fileSize,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isMe) Color(0xFF1565C0) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Text(
+                                text = message.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

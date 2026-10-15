@@ -7,6 +7,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -137,7 +138,10 @@ class ConversationRemoteDataSource(
         mediaUrl: String? = null,
         mediaType: String = "TEXT",
         fileName: String? = null,
-        fileSize: String? = null
+        fileSize: String? = null,
+        replyToId: String? = null,
+        replyToText: String? = null,
+        replyToSender: String? = null
     ): MessageDto {
         val jsonMap = mutableMapOf<String, JsonPrimitive>(
             "conversation_id" to JsonPrimitive(convId),
@@ -148,11 +152,32 @@ class ConversationRemoteDataSource(
         if (!mediaUrl.isNullOrBlank()) jsonMap["media_url"] = JsonPrimitive(mediaUrl)
         if (!fileName.isNullOrBlank()) jsonMap["file_name"] = JsonPrimitive(fileName)
         if (!fileSize.isNullOrBlank()) jsonMap["file_size"] = JsonPrimitive(fileSize)
+        if (!replyToId.isNullOrBlank()) jsonMap["reply_to_id"] = JsonPrimitive(replyToId)
+        if (!replyToText.isNullOrBlank()) jsonMap["reply_to_text"] = JsonPrimitive(replyToText)
+        if (!replyToSender.isNullOrBlank()) jsonMap["reply_to_sender"] =
+            JsonPrimitive(replyToSender)
 
         return supabaseClient.postgrest["messages"]
             .insert(JsonObject(jsonMap)) {
                 select()
             }.decodeSingle<MessageDto>()
+    }
+
+    suspend fun unsendMessageRecord(messageId: String) {
+        supabaseClient.postgrest["messages"]
+            .update(
+                JsonObject(
+                    mapOf(
+                        "content" to JsonPrimitive("Tin nhắn đã được thu hồi"),
+                        "is_unsent" to JsonPrimitive(true),
+                        "media_url" to JsonNull,
+                        "file_name" to JsonNull,
+                        "file_size" to JsonNull
+                    )
+                )
+            ) {
+                filter { eq("id", messageId) }
+            }
     }
 
     suspend fun updateLastMessageId(convId: String, msgId: String) {

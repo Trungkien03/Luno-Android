@@ -24,5 +24,10 @@ data class Message(
     val mediaUrl: String? = null,
     val mediaType: MediaType = MediaType.TEXT,
     val fileName: String? = null,
-    val fileSize: String? = null
+    val fileSize: String? = null,
+    val replyToMessageId: String? = null,
+    val replyToText: String? = null,
+    val replyToSenderName: String? = null,
+    val isUnsent: Boolean = false,
+    val reactions: Map<String, Int> = emptyMap()
 )

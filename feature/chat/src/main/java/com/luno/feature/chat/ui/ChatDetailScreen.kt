@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Phone
@@ -56,6 +57,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
@@ -73,9 +75,13 @@ fun ChatDetailScreen(
     conversation: Conversation,
     messages: List<Message>,
     currentUserId: String?,
+    replyingMessage: Message? = null,
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit,
-    onSendMedia: (bytes: ByteArray, fileName: String, mediaType: MediaType) -> Unit = { _, _, _ -> }
+    onSendMedia: (bytes: ByteArray, fileName: String, mediaType: MediaType) -> Unit = { _, _, _ -> },
+    onCancelReply: () -> Unit = {},
+    onReplyMessage: (Message) -> Unit = {},
+    onUnsendMessage: (Message) -> Unit = {}
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -177,61 +183,108 @@ fun ChatDetailScreen(
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 8.dp) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = {
-                        imagePickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    }) {
-                        Icon(Icons.Default.Image, contentDescription = "Ảnh")
-                    }
-
-                    IconButton(onClick = {
-                        filePickerLauncher.launch("*/*")
-                    }) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "Tệp")
-                    }
-
-                    OutlinedTextField(
-                        value = textInput,
-                        onValueChange = { textInput = it },
-                        placeholder = { Text("Tin nhắn") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 40.dp),
-                        maxLines = 4
-                    )
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(onClick = {
-                        if (textInput.isNotBlank()) {
-                            onSendMessage(textInput)
-                            textInput = ""
-                            coroutineScope.launch {
-                                if (messages.isNotEmpty()) {
-                                    listState.animateScrollToItem(messages.size - 1)
-                                }
+            Column {
+                if (replyingMessage != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(32.dp)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Đang trả lời ${if (replyingMessage.senderId == currentUserId) "chính mình" else conversation.recipient.name}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = replyingMessage.text.ifBlank {
+                                        when (replyingMessage.mediaType) {
+                                            MediaType.IMAGE -> "[Hình ảnh]"
+                                            MediaType.AUDIO -> "[Ghi âm]"
+                                            MediaType.FILE -> "[Tệp đính kèm]"
+                                            else -> ""
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1
+                                )
+                            }
+                            IconButton(onClick = onCancelReply) {
+                                Icon(Icons.Default.Clear, contentDescription = "Hủy trả lời")
                             }
                         }
-                    }) {
-                        Icon(
-                            Icons.Default.Send,
-                            contentDescription = "Gửi",
-                            tint = if (textInput.isBlank()) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
+                    }
+                }
+
+                Surface(tonalElevation = 8.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }) {
+                            Icon(Icons.Default.Image, contentDescription = "Ảnh")
+                        }
+
+                        IconButton(onClick = {
+                            filePickerLauncher.launch("*/*")
+                        }) {
+                            Icon(Icons.Default.AttachFile, contentDescription = "Tệp")
+                        }
+
+                        OutlinedTextField(
+                            value = textInput,
+                            onValueChange = { textInput = it },
+                            placeholder = { Text("Tin nhắn") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 40.dp),
+                            maxLines = 4
                         )
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        IconButton(onClick = {
+                            if (textInput.isNotBlank()) {
+                                onSendMessage(textInput)
+                                textInput = ""
+                                coroutineScope.launch {
+                                    if (messages.isNotEmpty()) {
+                                        listState.animateScrollToItem(messages.size - 1)
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Send,
+                                contentDescription = "Gửi",
+                                tint = if (textInput.isBlank()) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -320,7 +373,9 @@ fun ChatDetailScreen(
                         MessageBubble(
                             message = message,
                             isMe = isMe,
-                            recipientAvatarUrl = conversation.recipient.avatarUrl
+                            recipientAvatarUrl = conversation.recipient.avatarUrl,
+                            onReplyMessage = onReplyMessage,
+                            onDeleteMessage = onUnsendMessage
                         )
                     }
                 }

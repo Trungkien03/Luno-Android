@@ -28,7 +28,11 @@ object MessageMapper {
             mediaUrl = dto.mediaUrl,
             mediaType = parsedType,
             fileName = dto.fileName,
-            fileSize = dto.fileSize
+            fileSize = dto.fileSize,
+            replyToMessageId = dto.replyToId,
+            replyToText = dto.replyToText,
+            replyToSenderName = dto.replyToSender,
+            isUnsent = dto.isUnsent ?: false
         )
     }
 

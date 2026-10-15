@@ -69,7 +69,11 @@ object EntityMappers {
             mediaUrl = mediaUrl,
             mediaType = type,
             fileName = fileName,
-            fileSize = fileSize
+            fileSize = fileSize,
+            replyToMessageId = replyToId,
+            replyToText = replyToText,
+            replyToSenderName = replyToSender,
+            isUnsent = isUnsent
         )
     }
 
@@ -85,7 +89,11 @@ object EntityMappers {
             mediaUrl = mediaUrl,
             mediaType = mediaType.name,
             fileName = fileName,
-            fileSize = fileSize
+            fileSize = fileSize,
+            replyToId = replyToMessageId,
+            replyToText = replyToText,
+            replyToSender = replyToSenderName,
+            isUnsent = isUnsent
         )
     }
 }

@@ -20,5 +20,13 @@ data class MessageDto(
     @SerialName("file_name")
     val fileName: String? = null,
     @SerialName("file_size")
-    val fileSize: String? = null
+    val fileSize: String? = null,
+    @SerialName("reply_to_id")
+    val replyToId: String? = null,
+    @SerialName("reply_to_text")
+    val replyToText: String? = null,
+    @SerialName("reply_to_sender")
+    val replyToSender: String? = null,
+    @SerialName("is_unsent")
+    val isUnsent: Boolean? = false
 )

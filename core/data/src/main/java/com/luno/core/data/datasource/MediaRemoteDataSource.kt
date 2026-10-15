@@ -23,4 +23,18 @@ class MediaRemoteDataSource(
 
         return bucket.publicUrl(uniqueName)
     }
+
+    suspend fun deleteFile(
+        publicUrl: String,
+        bucketName: String = "chat-images"
+    ) {
+        try {
+            val fileName = publicUrl.substringAfterLast("/")
+            if (fileName.isNotBlank()) {
+                supabaseClient.storage[bucketName].delete(fileName)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

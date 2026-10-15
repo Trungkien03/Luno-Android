@@ -16,5 +16,9 @@ data class MessageEntity(
     val mediaUrl: String? = null,
     val mediaType: String = "TEXT",
     val fileName: String? = null,
-    val fileSize: String? = null
+    val fileSize: String? = null,
+    val replyToId: String? = null,
+    val replyToText: String? = null,
+    val replyToSender: String? = null,
+    val isUnsent: Boolean = false
 )

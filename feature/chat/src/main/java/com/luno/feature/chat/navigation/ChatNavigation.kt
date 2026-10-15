@@ -85,6 +85,7 @@ fun NavGraphBuilder.chatGraph(
 
         val conversation by viewModel.currentConversation.collectAsStateWithLifecycle()
         val messages by viewModel.currentMessages.collectAsStateWithLifecycle()
+        val replyingMessage by viewModel.replyingMessage.collectAsStateWithLifecycle()
         val currentUserId = viewModel.currentUserId
 
         val activeConversation = conversation
@@ -109,11 +110,15 @@ fun NavGraphBuilder.chatGraph(
             conversation = activeConversation,
             messages = messages,
             currentUserId = currentUserId,
+            replyingMessage = replyingMessage,
             onBackClick = onBack,
             onSendMessage = { text -> viewModel.sendMessage(text) },
             onSendMedia = { bytes, fileName, mediaType ->
                 viewModel.sendMediaMessage(bytes, fileName, mediaType)
-            }
+            },
+            onCancelReply = { viewModel.setReplyingMessage(null) },
+            onReplyMessage = { msg -> viewModel.setReplyingMessage(msg) },
+            onUnsendMessage = { msg -> viewModel.unsendMessage(msg) }
         )
     }
 }
