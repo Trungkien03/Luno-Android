@@ -67,7 +67,8 @@ fun LunoApp(
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return ChatViewModel(
                     AppModule.conversationRepository,
-                    AppModule.userRepository
+                    AppModule.userRepository,
+                    AppModule.mediaRepository
                 ) as T
             }
         }

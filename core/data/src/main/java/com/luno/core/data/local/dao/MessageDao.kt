@@ -26,6 +26,9 @@ interface MessageDao {
     @Query("UPDATE messages SET status = :status WHERE id = :msgId")
     suspend fun updateMessageStatus(msgId: String, status: String)
 
+    @Query("DELETE FROM messages WHERE id = :msgId")
+    suspend fun deleteMessage(msgId: String)
+
     @Query("DELETE FROM messages WHERE conversationId = :convId")
     suspend fun deleteMessagesForConversation(convId: String)
 }

@@ -130,18 +130,27 @@ class ConversationRemoteDataSource(
             }.decodeList<MessageDto>()
     }
 
-    suspend fun sendMessageRecord(convId: String, senderId: String, text: String): MessageDto {
+    suspend fun sendMessageRecord(
+        convId: String,
+        senderId: String,
+        text: String,
+        mediaUrl: String? = null,
+        mediaType: String = "TEXT",
+        fileName: String? = null,
+        fileSize: String? = null
+    ): MessageDto {
+        val jsonMap = mutableMapOf<String, JsonPrimitive>(
+            "conversation_id" to JsonPrimitive(convId),
+            "sender_id" to JsonPrimitive(senderId),
+            "content" to JsonPrimitive(text),
+            "media_type" to JsonPrimitive(mediaType)
+        )
+        if (!mediaUrl.isNullOrBlank()) jsonMap["media_url"] = JsonPrimitive(mediaUrl)
+        if (!fileName.isNullOrBlank()) jsonMap["file_name"] = JsonPrimitive(fileName)
+        if (!fileSize.isNullOrBlank()) jsonMap["file_size"] = JsonPrimitive(fileSize)
+
         return supabaseClient.postgrest["messages"]
-            .insert(
-                JsonObject(
-                    mapOf(
-                        "conversation_id" to JsonPrimitive(convId),
-                        "sender_id" to JsonPrimitive(senderId),
-                        "content" to JsonPrimitive(text),
-                        "type" to JsonPrimitive("text")
-                    )
-                )
-            ) {
+            .insert(JsonObject(jsonMap)) {
                 select()
             }.decodeSingle<MessageDto>()
     }

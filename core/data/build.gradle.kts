@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.supabase.gotrue.kt)
     implementation(libs.supabase.postgrest.kt)
     implementation(libs.supabase.realtime.kt)
+    implementation(libs.supabase.storage.kt)
 
     implementation(libs.androidx.datastore.preferences)
 

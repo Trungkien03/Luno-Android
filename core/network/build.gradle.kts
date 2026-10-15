@@ -81,6 +81,7 @@ dependencies {
     api(libs.supabase.postgrest.kt)
     api(libs.supabase.gotrue.kt)
     api(libs.supabase.realtime.kt)
+    api(libs.supabase.storage.kt)
     // OkHttp engine (not ktor-client-android) because Realtime needs WebSocket support.
     api(libs.ktor.client.okhttp)
 }

@@ -1,5 +1,9 @@
 package com.luno.feature.chat.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -23,10 +27,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
@@ -58,6 +62,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.kane.luno.utils.DateUtils
 import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
 import com.luno.feature.chat.ui.components.MessageBubble
 import kotlinx.coroutines.launch
@@ -69,13 +74,39 @@ fun ChatDetailScreen(
     messages: List<Message>,
     currentUserId: String?,
     onBackClick: () -> Unit,
-    onSendMessage: (String) -> Unit
+    onSendMessage: (String) -> Unit,
+    onSendMedia: (bytes: ByteArray, fileName: String, mediaType: MediaType) -> Unit = { _, _, _ -> }
 ) {
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            val fileName = "image_${System.currentTimeMillis()}.jpg"
+            if (bytes != null) {
+                onSendMedia(bytes, fileName, MediaType.IMAGE)
+            }
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            val fileName = "file_${System.currentTimeMillis()}"
+            if (bytes != null) {
+                onSendMedia(bytes, fileName, MediaType.FILE)
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.pointerInput(Unit) {
@@ -90,7 +121,6 @@ fun ChatDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        val context = LocalContext.current
                         val avatarRequest = remember(conversation) {
                             ImageRequest.Builder(context)
                                 .data(conversation.recipient.avatarUrl)
@@ -130,7 +160,7 @@ fun ChatDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Trở về")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở về")
                     }
                 },
                 actions = {
@@ -156,11 +186,18 @@ fun ChatDetailScreen(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = {
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }) {
                         Icon(Icons.Default.Image, contentDescription = "Ảnh")
                     }
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Mic, contentDescription = "Voice")
+
+                    IconButton(onClick = {
+                        filePickerLauncher.launch("*/*")
+                    }) {
+                        Icon(Icons.Default.AttachFile, contentDescription = "Tệp")
                     }
 
                     OutlinedTextField(
@@ -291,5 +328,3 @@ fun ChatDetailScreen(
         }
     }
 }
-
-

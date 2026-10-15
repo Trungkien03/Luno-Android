@@ -110,7 +110,10 @@ fun NavGraphBuilder.chatGraph(
             messages = messages,
             currentUserId = currentUserId,
             onBackClick = onBack,
-            onSendMessage = { text -> viewModel.sendMessage(text) }
+            onSendMessage = { text -> viewModel.sendMessage(text) },
+            onSendMedia = { bytes, fileName, mediaType ->
+                viewModel.sendMediaMessage(bytes, fileName, mediaType)
+            }
         )
     }
 }

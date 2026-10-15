@@ -7,11 +7,22 @@ enum class MessageStatus {
     READ       // ✓✓ Blue double checkmark
 }
 
+enum class MediaType {
+    TEXT,
+    IMAGE,
+    AUDIO,
+    FILE
+}
+
 data class Message(
     val id: String,
     val senderId: String,
     val text: String,
     val timestamp: Long,
     val isRead: Boolean = true,
-    val status: MessageStatus = MessageStatus.SENT
+    val status: MessageStatus = MessageStatus.SENT,
+    val mediaUrl: String? = null,
+    val mediaType: MediaType = MediaType.TEXT,
+    val fileName: String? = null,
+    val fileSize: String? = null
 )

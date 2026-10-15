@@ -9,6 +9,7 @@ import com.luno.core.data.mapper.MessageMapper
 import com.luno.core.data.mapper.UserMapper
 import com.luno.core.data.model.MessageDto
 import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
 import com.luno.core.domain.model.MessageStatus
 import com.luno.core.domain.model.User
@@ -62,12 +63,17 @@ class ConversationRepositoryImpl(
             try {
                 val currentUserId = msgEntity.senderId
                 val msgDto = remoteDataSource.sendMessageRecord(
-                    msgEntity.conversationId,
-                    currentUserId,
-                    msgEntity.content
+                    convId = msgEntity.conversationId,
+                    senderId = currentUserId,
+                    text = msgEntity.content,
+                    mediaUrl = msgEntity.mediaUrl,
+                    mediaType = msgEntity.mediaType,
+                    fileName = msgEntity.fileName,
+                    fileSize = msgEntity.fileSize
                 )
                 val sentMsg = MessageMapper.mapToDomain(msgDto)
-                messageDao?.updateMessageStatus(msgEntity.id, MessageStatus.SENT.name)
+                messageDao?.deleteMessage(msgEntity.id)
+                messageDao?.upsertMessage(sentMsg.toEntity(msgEntity.conversationId))
                 remoteDataSource.updateLastMessageId(msgEntity.conversationId, sentMsg.id)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -385,13 +391,21 @@ class ConversationRepositoryImpl(
                 val senderId = record["sender_id"]?.jsonPrimitive?.content ?: ""
                 val content = record["content"]?.jsonPrimitive?.content ?: ""
                 val createdAt = record["created_at"]?.jsonPrimitive?.content
+                val mediaUrl = record["media_url"]?.jsonPrimitive?.content
+                val mediaTypeStr = record["media_type"]?.jsonPrimitive?.content ?: "TEXT"
+                val fileName = record["file_name"]?.jsonPrimitive?.content
+                val fileSize = record["file_size"]?.jsonPrimitive?.content
 
                 val messageDto = MessageDto(
                     id = id,
                     conversationId = convId,
                     senderId = senderId,
                     content = content,
-                    createdAt = createdAt
+                    createdAt = createdAt,
+                    mediaUrl = mediaUrl,
+                    mediaType = mediaTypeStr,
+                    fileName = fileName,
+                    fileSize = fileSize
                 )
                 val message = MessageMapper.mapToDomain(messageDto)
 
@@ -419,9 +433,23 @@ class ConversationRepositoryImpl(
     }
 
     override suspend fun sendMessage(convId: String, text: String): Result<Unit> {
-        if (text.isBlank()) return Result.failure(Exception("Message is blank"))
-        val currentUserId = remoteDataSource.getCurrentUserId() ?: "me"
+        return sendMediaMessage(
+            convId = convId,
+            text = text,
+            mediaUrl = "",
+            mediaType = MediaType.TEXT
+        )
+    }
 
+    override suspend fun sendMediaMessage(
+        convId: String,
+        text: String,
+        mediaUrl: String,
+        mediaType: MediaType,
+        fileName: String?,
+        fileSize: String?
+    ): Result<Unit> {
+        val currentUserId = remoteDataSource.getCurrentUserId() ?: "me"
         val tempMsgId = "pending_${UUID.randomUUID()}"
         val localMessage = Message(
             id = tempMsgId,
@@ -429,7 +457,11 @@ class ConversationRepositoryImpl(
             text = text,
             timestamp = System.currentTimeMillis(),
             isRead = true,
-            status = MessageStatus.PENDING
+            status = MessageStatus.PENDING,
+            mediaUrl = mediaUrl.ifBlank { null },
+            mediaType = mediaType,
+            fileName = fileName,
+            fileSize = fileSize
         )
 
         if (messageDao != null) {
@@ -441,21 +473,25 @@ class ConversationRepositoryImpl(
         }
 
         return try {
-            val msgDto = remoteDataSource.sendMessageRecord(convId, currentUserId, text)
+            val msgDto = remoteDataSource.sendMessageRecord(
+                convId = convId,
+                senderId = currentUserId,
+                text = text,
+                mediaUrl = mediaUrl,
+                mediaType = mediaType.name,
+                fileName = fileName,
+                fileSize = fileSize
+            )
             val sentMessage = MessageMapper.mapToDomain(msgDto)
 
             if (messageDao != null) {
-                messageDao.updateMessageStatus(tempMsgId, MessageStatus.SENT.name)
+                messageDao.deleteMessage(tempMsgId)
                 messageDao.upsertMessage(sentMessage.toEntity(convId))
             } else {
                 val list = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
-                val index = list.indexOfFirst { it.id == tempMsgId }
-                if (index != -1) {
-                    list[index] = sentMessage
-                } else {
-                    list.add(sentMessage)
-                }
-                _messagesFlowMap[convId]?.value = list
+                list.removeAll { it.id == tempMsgId || it.id == sentMessage.id }
+                list.add(sentMessage)
+                _messagesFlowMap[convId]?.value = list.sortedBy { it.timestamp }
             }
 
             val currentConvs = _conversationsFlow.value.toMutableList()

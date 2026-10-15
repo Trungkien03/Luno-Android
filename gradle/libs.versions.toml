@@ -67,6 +67,7 @@ supabase-bom = { group = "io.github.jan-tennert.supabase", name = "bom", version
 supabase-postgrest-kt = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 supabase-gotrue-kt = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabase-realtime-kt = { group = "io.github.jan-tennert.supabase", name = "realtime-kt" }
+supabase-storage-kt = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
 ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }

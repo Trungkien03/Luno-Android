@@ -3,9 +3,11 @@ package com.luno.feature.chat.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.luno.core.domain.model.Conversation
+import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
 import com.luno.core.domain.model.User
 import com.luno.core.domain.repository.ConversationRepository
+import com.luno.core.domain.repository.MediaRepository
 import com.luno.core.domain.repository.UserRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +20,8 @@ import kotlinx.coroutines.launch
 
 class ChatViewModel(
     private val conversationRepository: ConversationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val mediaRepository: MediaRepository? = null
 ) : ViewModel() {
 
     val conversations: StateFlow<List<Conversation>> = conversationRepository.conversationsFlow
@@ -138,6 +141,38 @@ class ChatViewModel(
         val convId = _selectedConversationId.value ?: return
         viewModelScope.launch {
             conversationRepository.sendMessage(convId, text)
+        }
+    }
+
+    fun sendMediaMessage(
+        bytes: ByteArray,
+        fileName: String,
+        mediaType: MediaType,
+        text: String = ""
+    ) {
+        val convId = _selectedConversationId.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val uploadResult = mediaRepository?.uploadMedia(bytes, fileName, mediaType)
+            val mediaUrl = uploadResult?.getOrNull().orEmpty()
+            val sizeFormatted = "${bytes.size / 1024} KB"
+
+            conversationRepository.sendMediaMessage(
+                convId = convId,
+                text = text.ifBlank {
+                    when (mediaType) {
+                        MediaType.IMAGE -> "[Hình ảnh]"
+                        MediaType.AUDIO -> "[Ghi âm]"
+                        MediaType.FILE -> "[Tệp đính kèm]"
+                        else -> ""
+                    }
+                },
+                mediaUrl = mediaUrl,
+                mediaType = mediaType,
+                fileName = fileName,
+                fileSize = sizeFormatted
+            )
+            _isLoading.value = false
         }
     }
 

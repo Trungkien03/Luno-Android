@@ -4,14 +4,17 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.luno.core.data.datasource.ConversationRemoteDataSource
+import com.luno.core.data.datasource.MediaRemoteDataSource
 import com.luno.core.data.local.LunoDatabase
 import com.luno.core.data.local.UserPreferencesDataSource
 import com.luno.core.data.local.userDataStore
 import com.luno.core.data.repository.AuthRepositoryImpl
 import com.luno.core.data.repository.ConversationRepositoryImpl
+import com.luno.core.data.repository.MediaRepositoryImpl
 import com.luno.core.data.repository.UserRepositoryImpl
 import com.luno.core.domain.repository.AuthRepository
 import com.luno.core.domain.repository.ConversationRepository
+import com.luno.core.domain.repository.MediaRepository
 import com.luno.core.domain.repository.UserRepository
 import com.luno.core.network.di.SupabaseModule
 
@@ -40,6 +43,10 @@ object AppModule {
             SupabaseModule.client,
             userRepository
         )
+    }
+
+    val mediaRepository: MediaRepository by lazy {
+        MediaRepositoryImpl(MediaRemoteDataSource(SupabaseModule.client))
     }
 
     val conversationRepository: ConversationRepository by lazy {

@@ -12,5 +12,9 @@ data class MessageEntity(
     val content: String,
     val timestamp: Long,
     val status: String = "SENT",
-    val isRead: Boolean = true
+    val isRead: Boolean = true,
+    val mediaUrl: String? = null,
+    val mediaType: String = "TEXT",
+    val fileName: String? = null,
+    val fileSize: String? = null
 )

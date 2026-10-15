@@ -11,7 +11,14 @@ data class MessageDto(
     @SerialName("sender_id")
     val senderId: String,
     val content: String,
-    val type: String? = "text",
     @SerialName("created_at")
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    @SerialName("media_url")
+    val mediaUrl: String? = null,
+    @SerialName("media_type")
+    val mediaType: String? = "TEXT",
+    @SerialName("file_name")
+    val fileName: String? = null,
+    @SerialName("file_size")
+    val fileSize: String? = null
 )

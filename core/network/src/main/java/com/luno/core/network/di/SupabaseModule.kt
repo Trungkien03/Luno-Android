@@ -12,6 +12,7 @@ import io.github.jan.supabase.auth.SettingsSessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.storage.Storage
 
 object SupabaseModule {
     private val SUPABASE_URL = BuildConfig.SUPABASE_URL
@@ -43,6 +44,7 @@ object SupabaseModule {
             }
             install(Postgrest)
             install(Realtime)
+            install(Storage)
         }
     }
 }

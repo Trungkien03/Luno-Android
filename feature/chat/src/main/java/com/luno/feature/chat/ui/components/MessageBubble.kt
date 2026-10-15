@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +43,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +53,7 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.kane.luno.utils.DateUtils
+import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
@@ -138,11 +144,83 @@ fun MessageBubble(
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
-                )
+                when (message.mediaType) {
+                    MediaType.IMAGE -> {
+                        if (!message.mediaUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = message.mediaUrl,
+                                contentDescription = "Hình ảnh",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                        if (message.text.isNotBlank() && message.text != "[Hình ảnh]") {
+                            Text(
+                                text = message.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    MediaType.AUDIO -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Ghi âm",
+                                tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Ghi âm " + (message.fileSize ?: ""),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    MediaType.FILE -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.InsertDriveFile,
+                                contentDescription = "Tệp",
+                                tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
+                            )
+                            Column {
+                                Text(
+                                    text = message.fileName ?: "Tệp đính kèm",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                                )
+                                val fileSize = message.fileSize
+                                if (!fileSize.isNullOrBlank()) {
+                                    Text(
+                                        text = fileSize,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isMe) Color(0xFF1565C0) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        Text(
+                            text = message.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
 
@@ -171,10 +249,9 @@ fun MessagePopupOption(
     onReply: () -> Unit,
     onDelete: () -> Unit
 ) {
-    // Popup neo ở phía trên bong bóng chat
     Popup(
         alignment = if (isMe) Alignment.TopEnd else Alignment.TopStart,
-        offset = IntOffset(x = 0, y = -110), // Đẩy popup nổi lên trên bubble, không đẩy layout
+        offset = IntOffset(x = 0, y = -110),
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(
             focusable = true,
@@ -191,7 +268,6 @@ fun MessagePopupOption(
             Column(
                 modifier = Modifier.padding(vertical = 4.dp)
             ) {
-                // Header hiển thị thời gian gửi chi tiết
                 Text(
                     text = "Gửi lúc: ${DateUtils.formatMessageTime(timestamp)}",
                     fontSize = 11.sp,
