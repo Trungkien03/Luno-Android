@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.luno.core.data.datasource.ConversationRemoteDataSource
+import com.luno.core.data.local.LunoDatabase
 import com.luno.core.data.local.UserPreferencesDataSource
 import com.luno.core.data.local.userDataStore
 import com.luno.core.data.repository.AuthRepositoryImpl
@@ -16,10 +17,12 @@ import com.luno.core.network.di.SupabaseModule
 
 object AppModule {
     private lateinit var dataStore: DataStore<Preferences>
+    private lateinit var database: LunoDatabase
 
     fun initialize(context: Context) {
         val appContext = context.applicationContext
         dataStore = appContext.userDataStore
+        database = LunoDatabase.getInstance(appContext)
         SupabaseModule.initialize(appContext)
     }
 
@@ -40,6 +43,10 @@ object AppModule {
     }
 
     val conversationRepository: ConversationRepository by lazy {
-        ConversationRepositoryImpl(ConversationRemoteDataSource(SupabaseModule.client))
+        ConversationRepositoryImpl(
+            remoteDataSource = ConversationRemoteDataSource(SupabaseModule.client),
+            conversationDao = database.conversationDao(),
+            messageDao = database.messageDao()
+        )
     }
 }

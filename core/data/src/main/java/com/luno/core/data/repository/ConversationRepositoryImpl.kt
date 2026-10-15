@@ -1,11 +1,16 @@
 package com.luno.core.data.repository
 
 import com.luno.core.data.datasource.ConversationRemoteDataSource
+import com.luno.core.data.local.dao.ConversationDao
+import com.luno.core.data.local.dao.MessageDao
+import com.luno.core.data.mapper.EntityMappers.toDomain
+import com.luno.core.data.mapper.EntityMappers.toEntity
 import com.luno.core.data.mapper.MessageMapper
 import com.luno.core.data.mapper.UserMapper
 import com.luno.core.data.model.MessageDto
 import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.Message
+import com.luno.core.domain.model.MessageStatus
 import com.luno.core.domain.model.User
 import com.luno.core.domain.repository.ConversationRepository
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
@@ -20,16 +25,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.UUID
 
 class ConversationRepositoryImpl(
-    private val remoteDataSource: ConversationRemoteDataSource
+    private val remoteDataSource: ConversationRemoteDataSource,
+    private val conversationDao: ConversationDao? = null,
+    private val messageDao: MessageDao? = null
 ) : ConversationRepository {
 
     private val _conversationsFlow = MutableStateFlow<List<Conversation>>(emptyList())
-    override val conversationsFlow: Flow<List<Conversation>> = _conversationsFlow.asStateFlow()
+    override val conversationsFlow: Flow<List<Conversation>> =
+        conversationDao?.getConversations()?.map { entities ->
+            entities.map { it.toDomain() }
+        } ?: _conversationsFlow.asStateFlow()
 
     private val _messagesFlowMap = mutableMapOf<String, MutableStateFlow<List<Message>>>()
     private val _messageJobs = mutableMapOf<String, Job>()
@@ -37,6 +49,31 @@ class ConversationRepositoryImpl(
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var userStatusChannelJob: Job? = null
+
+    init {
+        repositoryScope.launch {
+            syncPendingMessages()
+        }
+    }
+
+    private suspend fun syncPendingMessages() {
+        val pending = messageDao?.getPendingMessages().orEmpty()
+        for (msgEntity in pending) {
+            try {
+                val currentUserId = msgEntity.senderId
+                val msgDto = remoteDataSource.sendMessageRecord(
+                    msgEntity.conversationId,
+                    currentUserId,
+                    msgEntity.content
+                )
+                val sentMsg = MessageMapper.mapToDomain(msgDto)
+                messageDao?.updateMessageStatus(msgEntity.id, MessageStatus.SENT.name)
+                remoteDataSource.updateLastMessageId(msgEntity.conversationId, sentMsg.id)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     override suspend fun fetchConversations() {
         try {
@@ -78,7 +115,8 @@ class ConversationRepositoryImpl(
                     senderId = "",
                     text = "Chưa có tin nhắn",
                     timestamp = System.currentTimeMillis(),
-                    isRead = true
+                    isRead = true,
+                    status = MessageStatus.SENT
                 )
 
                 if (!lastMsgId.isNullOrBlank()) {
@@ -88,18 +126,18 @@ class ConversationRepositoryImpl(
                     }
                 }
 
-                conversationList.add(
-                    Conversation(
-                        id = convId,
-                        recipient = recipient,
-                        lastMessage = lastMessage,
-                        unreadCount = 0,
-                        isPinned = false
-                    )
+                val conv = Conversation(
+                    id = convId,
+                    recipient = recipient,
+                    lastMessage = lastMessage,
+                    unreadCount = 0,
+                    isPinned = false
                 )
+                conversationList.add(conv)
             }
 
             _conversationsFlow.value = conversationList
+            conversationDao?.upsertConversations(conversationList.map { it.toEntity() })
             subscribeToUserStatus()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -133,6 +171,7 @@ class ConversationRepositoryImpl(
                     }
                     if (updated) {
                         _conversationsFlow.value = currentConvs
+                        conversationDao?.upsertConversations(currentConvs.map { it.toEntity() })
                     }
                 }.launchIn(repositoryScope)
 
@@ -146,6 +185,9 @@ class ConversationRepositoryImpl(
         try {
             val currentUserId = remoteDataSource.getCurrentUserId() ?: return
             remoteDataSource.updateOnlineStatus(currentUserId, isOnline)
+            if (isOnline) {
+                syncPendingMessages()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -179,7 +221,8 @@ class ConversationRepositoryImpl(
                     senderId = "",
                     text = "Chưa có tin nhắn",
                     timestamp = System.currentTimeMillis(),
-                    isRead = true
+                    isRead = true,
+                    status = MessageStatus.SENT
                 ),
                 unreadCount = 0,
                 isPinned = false
@@ -189,6 +232,7 @@ class ConversationRepositoryImpl(
             if (currentList.none { it.id == newConvId }) {
                 currentList.add(0, newConversation)
                 _conversationsFlow.value = currentList
+                conversationDao?.upsertConversation(newConversation.toEntity())
             }
 
             Result.success(newConvId)
@@ -200,6 +244,9 @@ class ConversationRepositoryImpl(
 
     override suspend fun getConversationDetails(convId: String): Conversation? {
         getConversation(convId)?.let { return it }
+        val dbConv = conversationDao?.getConversationById(convId)
+        if (dbConv != null) return dbConv.toDomain()
+
         return try {
             val currentUserId =
                 remoteDataSource.getCurrentUserId() ?: return fallbackConversation(convId)
@@ -232,7 +279,8 @@ class ConversationRepositoryImpl(
                 senderId = "",
                 text = "Chưa có tin nhắn",
                 timestamp = System.currentTimeMillis(),
-                isRead = true
+                isRead = true,
+                status = MessageStatus.SENT
             )
 
             if (!lastMsgId.isNullOrBlank()) {
@@ -250,12 +298,7 @@ class ConversationRepositoryImpl(
                 isPinned = false
             )
 
-            val currentList = _conversationsFlow.value.toMutableList()
-            if (currentList.none { it.id == convId }) {
-                currentList.add(conversation)
-                _conversationsFlow.value = currentList
-            }
-
+            conversationDao?.upsertConversation(conversation.toEntity())
             conversation
         } catch (e: Exception) {
             e.printStackTrace()
@@ -272,7 +315,8 @@ class ConversationRepositoryImpl(
                 senderId = "",
                 text = "Chưa có tin nhắn",
                 timestamp = System.currentTimeMillis(),
-                isRead = true
+                isRead = true,
+                status = MessageStatus.SENT
             ),
             unreadCount = 0,
             isPinned = false
@@ -280,6 +324,16 @@ class ConversationRepositoryImpl(
     }
 
     override fun getMessagesForConversation(convId: String): Flow<List<Message>> {
+        if (messageDao != null) {
+            repositoryScope.launch {
+                subscribeToMessages(convId)
+                fetchMessages(convId)
+            }
+            return messageDao.getMessagesForConversation(convId).map { entities ->
+                entities.map { it.toDomain() }
+            }
+        }
+
         if (!_messagesFlowMap.containsKey(convId)) {
             _messagesFlowMap[convId] = MutableStateFlow(emptyList())
             repositoryScope.launch {
@@ -294,7 +348,6 @@ class ConversationRepositoryImpl(
 
     override fun stopObservingMessages(convId: String) {
         _messageJobs.remove(convId)?.cancel()
-        _messagesFlowMap.remove(convId)
         _messageChannels.remove(convId)?.let { channel ->
             repositoryScope.launch { channel.unsubscribe() }
         }
@@ -303,9 +356,15 @@ class ConversationRepositoryImpl(
     private suspend fun fetchMessages(convId: String) {
         try {
             val messageDtos = remoteDataSource.fetchMessages(convId)
-            val messages =
-                messageDtos.map { MessageMapper.mapToDomain(it) }.sortedBy { it.timestamp }
-            _messagesFlowMap[convId]?.value = messages
+            val newMessages = messageDtos.map { MessageMapper.mapToDomain(it) }
+
+            if (messageDao != null) {
+                messageDao.upsertMessages(newMessages.map { it.toEntity(convId) })
+            } else {
+                val current = _messagesFlowMap[convId]?.value.orEmpty()
+                val merged = (current + newMessages).distinctBy { it.id }.sortedBy { it.timestamp }
+                _messagesFlowMap[convId]?.value = merged
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -336,16 +395,23 @@ class ConversationRepositoryImpl(
                 )
                 val message = MessageMapper.mapToDomain(messageDto)
 
-                val current = _messagesFlowMap[convId]?.value.orEmpty()
-                if (current.none { it.id == id }) {
-                    _messagesFlowMap[convId]?.value = (current + message).sortedBy { it.timestamp }
+                if (messageDao != null) {
+                    messageDao.upsertMessage(message.toEntity(convId))
+                } else {
+                    val current = _messagesFlowMap[convId]?.value.orEmpty()
+                    if (current.none { it.id == id }) {
+                        _messagesFlowMap[convId]?.value =
+                            (current + message).sortedBy { it.timestamp }
+                    }
                 }
 
-                val convs = _conversationsFlow.value.toMutableList()
-                val index = convs.indexOfFirst { it.id == convId }
+                val currentConvs = _conversationsFlow.value.toMutableList()
+                val index = currentConvs.indexOfFirst { it.id == convId }
                 if (index != -1) {
-                    convs[index] = convs[index].copy(lastMessage = message)
-                    _conversationsFlow.value = convs
+                    val updatedConv = currentConvs[index].copy(lastMessage = message)
+                    currentConvs[index] = updatedConv
+                    _conversationsFlow.value = currentConvs
+                    conversationDao?.upsertConversation(updatedConv.toEntity())
                 }
             }.launchIn(repositoryScope)
 
@@ -356,25 +422,53 @@ class ConversationRepositoryImpl(
         if (text.isBlank()) return Result.failure(Exception("Message is blank"))
         val currentUserId = remoteDataSource.getCurrentUserId() ?: "me"
 
+        val tempMsgId = "pending_${UUID.randomUUID()}"
+        val localMessage = Message(
+            id = tempMsgId,
+            senderId = currentUserId,
+            text = text,
+            timestamp = System.currentTimeMillis(),
+            isRead = true,
+            status = MessageStatus.PENDING
+        )
+
+        if (messageDao != null) {
+            messageDao.upsertMessage(localMessage.toEntity(convId))
+        } else {
+            val currentList = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
+            currentList.add(localMessage)
+            _messagesFlowMap[convId]?.value = currentList
+        }
+
         return try {
             val msgDto = remoteDataSource.sendMessageRecord(convId, currentUserId, text)
-            val message = MessageMapper.mapToDomain(msgDto)
+            val sentMessage = MessageMapper.mapToDomain(msgDto)
 
-            val list = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
-            if (list.none { it.id == message.id }) {
-                list.add(message)
-                _messagesFlowMap[convId]?.value = list.toList()
+            if (messageDao != null) {
+                messageDao.updateMessageStatus(tempMsgId, MessageStatus.SENT.name)
+                messageDao.upsertMessage(sentMessage.toEntity(convId))
+            } else {
+                val list = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
+                val index = list.indexOfFirst { it.id == tempMsgId }
+                if (index != -1) {
+                    list[index] = sentMessage
+                } else {
+                    list.add(sentMessage)
+                }
+                _messagesFlowMap[convId]?.value = list
             }
 
             val currentConvs = _conversationsFlow.value.toMutableList()
             val index = currentConvs.indexOfFirst { it.id == convId }
             if (index != -1) {
                 val conv = currentConvs[index]
-                currentConvs[index] = conv.copy(lastMessage = message, unreadCount = 0)
+                val updatedConv = conv.copy(lastMessage = sentMessage, unreadCount = 0)
+                currentConvs[index] = updatedConv
                 _conversationsFlow.value = currentConvs
+                conversationDao?.upsertConversation(updatedConv.toEntity())
             }
 
-            remoteDataSource.updateLastMessageId(convId, message.id)
+            remoteDataSource.updateLastMessageId(convId, sentMessage.id)
             Result.success(Unit)
         } catch (e: Exception) {
             e.printStackTrace()

@@ -2,13 +2,12 @@ plugins {
     id("com.android.library")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.luno.core.data"
-    compileSdk {
-        version = release(37)
-    }
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
@@ -57,4 +56,8 @@ dependencies {
     implementation(libs.supabase.realtime.kt)
 
     implementation(libs.androidx.datastore.preferences)
+
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 }
