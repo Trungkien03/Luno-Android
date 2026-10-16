@@ -10,6 +10,7 @@ import com.luno.core.domain.repository.ConversationRepository
 import com.luno.core.domain.repository.MediaRepository
 import com.luno.core.domain.repository.UserRepository
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +45,11 @@ class ChatViewModel(
 
     private val _replyingMessage = MutableStateFlow<Message?>(null)
     val replyingMessage: StateFlow<Message?> = _replyingMessage.asStateFlow()
+
+    private val _isRecipientTyping = MutableStateFlow(false)
+    val isRecipientTyping: StateFlow<Boolean> = _isRecipientTyping.asStateFlow()
+
+    private var typingDebounceJob: Job? = null
 
     init {
         refreshConversations()
@@ -118,6 +124,7 @@ class ChatViewModel(
         val previousId = _selectedConversationId.value
         _selectedConversationId.value = convId
         _replyingMessage.value = null
+        _isRecipientTyping.value = false
         messagesJob?.cancel()
         if (previousId != null && previousId != convId) {
             conversationRepository.stopObservingMessages(previousId)
@@ -127,12 +134,39 @@ class ChatViewModel(
             messagesJob = viewModelScope.launch {
                 conversationRepository.getConversationDetails(convId)
 
+                launch {
+                    conversationRepository.getTypingStatus(convId).collect { typing ->
+                        _isRecipientTyping.value = typing
+                    }
+                }
+
                 conversationRepository.getMessagesForConversation(convId).collect { msgs ->
                     _currentMessages.value = msgs
                 }
             }
         } else {
             _currentMessages.value = emptyList()
+        }
+    }
+
+    fun sendTypingIndicator(isTyping: Boolean) {
+        val convId = _selectedConversationId.value ?: return
+        viewModelScope.launch {
+            conversationRepository.sendTypingStatus(convId, isTyping)
+        }
+        if (isTyping) {
+            typingDebounceJob?.cancel()
+            typingDebounceJob = viewModelScope.launch {
+                delay(2500)
+                conversationRepository.sendTypingStatus(convId, false)
+            }
+        }
+    }
+
+    fun loadOlderMessages() {
+        val convId = _selectedConversationId.value ?: return
+        viewModelScope.launch {
+            conversationRepository.loadOlderMessages(convId)
         }
     }
 
@@ -149,6 +183,7 @@ class ChatViewModel(
         val convId = _selectedConversationId.value ?: return
         val reply = _replyingMessage.value
         viewModelScope.launch {
+            sendTypingIndicator(false)
             if (reply != null) {
                 val recipientName =
                     if (reply.senderId == currentUserId) "Bạn" else currentConversation.value?.recipient?.name

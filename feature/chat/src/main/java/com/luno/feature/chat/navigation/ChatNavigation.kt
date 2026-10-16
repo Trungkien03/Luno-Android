@@ -86,6 +86,7 @@ fun NavGraphBuilder.chatGraph(
         val conversation by viewModel.currentConversation.collectAsStateWithLifecycle()
         val messages by viewModel.currentMessages.collectAsStateWithLifecycle()
         val replyingMessage by viewModel.replyingMessage.collectAsStateWithLifecycle()
+        val isRecipientTyping by viewModel.isRecipientTyping.collectAsStateWithLifecycle()
         val currentUserId = viewModel.currentUserId
 
         val activeConversation = conversation
@@ -111,6 +112,7 @@ fun NavGraphBuilder.chatGraph(
             messages = messages,
             currentUserId = currentUserId,
             replyingMessage = replyingMessage,
+            isRecipientTyping = isRecipientTyping,
             onBackClick = onBack,
             onSendMessage = { text -> viewModel.sendMessage(text) },
             onSendMedia = { bytes, fileName, mediaType ->
@@ -118,7 +120,9 @@ fun NavGraphBuilder.chatGraph(
             },
             onCancelReply = { viewModel.setReplyingMessage(null) },
             onReplyMessage = { msg -> viewModel.setReplyingMessage(msg) },
-            onUnsendMessage = { msg -> viewModel.unsendMessage(msg) }
+            onUnsendMessage = { msg -> viewModel.unsendMessage(msg) },
+            onTyping = { isTyping -> viewModel.sendTypingIndicator(isTyping) },
+            onLoadOlderMessages = { viewModel.loadOlderMessages() }
         )
     }
 }

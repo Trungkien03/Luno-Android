@@ -18,6 +18,7 @@ import com.luno.core.domain.repository.ConversationRepository
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 class ConversationRepositoryImpl(
@@ -47,6 +54,7 @@ class ConversationRepositoryImpl(
         } ?: _conversationsFlow.asStateFlow()
 
     private val _messagesFlowMap = mutableMapOf<String, MutableStateFlow<List<Message>>>()
+    private val _typingFlowMap = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val _messageJobs = mutableMapOf<String, Job>()
     private val _messageChannels = mutableMapOf<String, RealtimeChannel>()
 
@@ -56,6 +64,60 @@ class ConversationRepositoryImpl(
     init {
         repositoryScope.launch {
             syncPendingMessages()
+        }
+    }
+
+    override fun getTypingStatus(convId: String): Flow<Boolean> {
+        if (!_typingFlowMap.containsKey(convId)) {
+            _typingFlowMap[convId] = MutableStateFlow(false)
+        }
+        return _typingFlowMap[convId]!!.asStateFlow()
+    }
+
+    override suspend fun sendTypingStatus(convId: String, isTyping: Boolean) {
+        try {
+            val currentUserId = remoteDataSource.getCurrentUserId() ?: return
+            val channel = _messageChannels[convId] ?: return
+            channel.broadcast(
+                event = "typing",
+                message = JsonObject(
+                    mapOf(
+                        "user_id" to JsonPrimitive(currentUserId),
+                        "is_typing" to JsonPrimitive(isTyping)
+                    )
+                )
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun loadOlderMessages(convId: String) {
+        try {
+            val currentMessages = _messagesFlowMap[convId]?.value
+                ?: messageDao?.getMessagesForConversationOnce(convId)?.map { it.toDomain() }
+                ?: emptyList()
+
+            val oldestMessage = currentMessages.minByOrNull { it.timestamp } ?: return
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val oldestIso = dateFormat.format(Date(oldestMessage.timestamp))
+
+            val olderDtos = remoteDataSource.fetchOlderMessages(convId, oldestIso, limit = 20)
+            if (olderDtos.isEmpty()) return
+
+            val olderMessages = olderDtos.map { MessageMapper.mapToDomain(it) }
+
+            if (messageDao != null) {
+                messageDao.upsertMessages(olderMessages.map { it.toEntity(convId) })
+            } else {
+                val merged =
+                    (currentMessages + olderMessages).distinctBy { it.id }.sortedBy { it.timestamp }
+                _messagesFlowMap[convId]?.value = merged
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -386,6 +448,57 @@ class ConversationRepositoryImpl(
         val channel = remoteDataSource.createMessageChannel(convId)
         _messageChannels[convId] = channel
 
+        channel.broadcastFlow<JsonObject>(event = "typing")
+            .onEach { payload ->
+                val typingUserId = payload["user_id"]?.jsonPrimitive?.content
+                val isTyping = payload["is_typing"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                val currentUserId = remoteDataSource.getCurrentUserId()
+                if (typingUserId != null && typingUserId != currentUserId) {
+                    if (!_typingFlowMap.containsKey(convId)) {
+                        _typingFlowMap[convId] = MutableStateFlow(false)
+                    }
+                    _typingFlowMap[convId]?.value = isTyping
+                }
+            }.launchIn(repositoryScope)
+
+        channel.postgresChangeFlow<PostgresAction.Update>(schema = "public") {
+            table = "messages"
+            filter("conversation_id", FilterOperator.EQ, convId)
+        }.onEach { update ->
+            val record = update.record
+            val id = record["id"]?.jsonPrimitive?.content ?: return@onEach
+            val content = record["content"]?.jsonPrimitive?.content ?: "Tin nhắn đã được thu hồi"
+            val isUnsent = record["is_unsent"]?.jsonPrimitive?.content?.toBoolean() ?: false
+
+            if (messageDao != null) {
+                val existingList = messageDao.getMessagesForConversationOnce(convId)
+                val existing = existingList.find { it.id == id }
+                if (existing != null) {
+                    val updatedEntity = existing.copy(
+                        content = content,
+                        isUnsent = isUnsent,
+                        mediaUrl = null,
+                        fileName = null,
+                        fileSize = null
+                    )
+                    messageDao.upsertMessage(updatedEntity)
+                }
+            } else {
+                val current = _messagesFlowMap[convId]?.value.orEmpty().toMutableList()
+                val index = current.indexOfFirst { it.id == id }
+                if (index != -1) {
+                    current[index] = current[index].copy(
+                        text = content,
+                        isUnsent = isUnsent,
+                        mediaUrl = null,
+                        fileName = null,
+                        fileSize = null
+                    )
+                    _messagesFlowMap[convId]?.value = current
+                }
+            }
+        }.launchIn(repositoryScope)
+
         _messageJobs[convId] =
             channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
                 table = "messages"
@@ -566,19 +679,30 @@ class ConversationRepositoryImpl(
             remoteDataSource.unsendMessageRecord(messageId)
 
             val unsentText = "Tin nhắn đã được thu hồi"
+            if (messageDao != null) {
+                val existingList = messageDao.getMessagesForConversationOnce(convId)
+                val existing = existingList.find { it.id == messageId }
+                if (existing != null) {
+                    val updatedEntity = existing.copy(
+                        content = unsentText,
+                        isUnsent = true,
+                        mediaUrl = null,
+                        fileName = null,
+                        fileSize = null
+                    )
+                    messageDao.upsertMessage(updatedEntity)
+                }
+            }
+
             val currentMessages = _messagesFlowMap[convId]?.value.orEmpty().map { msg ->
                 if (msg.id == messageId) {
-                    val unsentMsg = msg.copy(
+                    msg.copy(
                         text = unsentText,
                         isUnsent = true,
                         mediaUrl = null,
                         fileName = null,
                         fileSize = null
                     )
-                    if (messageDao != null) {
-                        repositoryScope.launch { messageDao.upsertMessage(unsentMsg.toEntity(convId)) }
-                    }
-                    unsentMsg
                 } else msg
             }
             _messagesFlowMap[convId]?.value = currentMessages

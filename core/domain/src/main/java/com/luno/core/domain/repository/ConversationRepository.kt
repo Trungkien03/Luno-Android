@@ -11,6 +11,9 @@ interface ConversationRepository {
     suspend fun startConversation(recipientId: String): Result<String>
     suspend fun getConversationDetails(convId: String): Conversation?
     fun getMessagesForConversation(convId: String): Flow<List<Message>>
+    suspend fun loadOlderMessages(convId: String)
+    fun getTypingStatus(convId: String): Flow<Boolean>
+    suspend fun sendTypingStatus(convId: String, isTyping: Boolean)
     fun stopObservingMessages(convId: String)
     suspend fun sendMessage(convId: String, text: String): Result<Unit>
     suspend fun sendMediaMessage(

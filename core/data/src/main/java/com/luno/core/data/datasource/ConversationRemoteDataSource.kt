@@ -5,6 +5,7 @@ import com.luno.core.data.model.UserDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import kotlinx.serialization.json.JsonNull
@@ -124,11 +125,31 @@ class ConversationRemoteDataSource(
         return newConvId
     }
 
-    suspend fun fetchMessages(convId: String): List<MessageDto> {
-        return supabaseClient.postgrest["messages"]
+    suspend fun fetchMessages(convId: String, limit: Long = 20): List<MessageDto> {
+        val list = supabaseClient.postgrest["messages"]
             .select {
                 filter { eq("conversation_id", convId) }
+                order("created_at", Order.DESCENDING)
+                limit(limit)
             }.decodeList<MessageDto>()
+        return list.reversed()
+    }
+
+    suspend fun fetchOlderMessages(
+        convId: String,
+        beforeCreatedAt: String,
+        limit: Long = 20
+    ): List<MessageDto> {
+        val list = supabaseClient.postgrest["messages"]
+            .select {
+                filter {
+                    eq("conversation_id", convId)
+                    lt("created_at", beforeCreatedAt)
+                }
+                order("created_at", Order.DESCENDING)
+                limit(limit)
+            }.decodeList<MessageDto>()
+        return list.reversed()
     }
 
     suspend fun sendMessageRecord(

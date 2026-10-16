@@ -45,11 +45,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -67,6 +70,7 @@ import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
 import com.luno.feature.chat.ui.components.MessageBubble
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,12 +80,15 @@ fun ChatDetailScreen(
     messages: List<Message>,
     currentUserId: String?,
     replyingMessage: Message? = null,
+    isRecipientTyping: Boolean = false,
     onBackClick: () -> Unit,
     onSendMessage: (String) -> Unit,
     onSendMedia: (bytes: ByteArray, fileName: String, mediaType: MediaType) -> Unit = { _, _, _ -> },
     onCancelReply: () -> Unit = {},
     onReplyMessage: (Message) -> Unit = {},
-    onUnsendMessage: (Message) -> Unit = {}
+    onUnsendMessage: (Message) -> Unit = {},
+    onTyping: (Boolean) -> Unit = {},
+    onLoadOlderMessages: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -89,6 +96,14 @@ fun ChatDetailScreen(
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .filter { it == 0 }
+            .collect {
+                onLoadOlderMessages()
+            }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -158,8 +173,10 @@ fun ChatDetailScreen(
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = conversation.recipient.lastSeenFormatted,
+                                text = if (isRecipientTyping) "Đang soạn tin..." else conversation.recipient.lastSeenFormatted,
                                 style = MaterialTheme.typography.labelSmall,
+                                color = if (isRecipientTyping) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontStyle = if (isRecipientTyping) FontStyle.Italic else FontStyle.Normal
                             )
                         }
                     }
@@ -254,7 +271,10 @@ fun ChatDetailScreen(
 
                         OutlinedTextField(
                             value = textInput,
-                            onValueChange = { textInput = it },
+                            onValueChange = { newValue ->
+                                textInput = newValue
+                                onTyping(newValue.isNotBlank())
+                            },
                             placeholder = { Text("Tin nhắn") },
                             modifier = Modifier
                                 .weight(1f)
@@ -268,6 +288,7 @@ fun ChatDetailScreen(
                             if (textInput.isNotBlank()) {
                                 onSendMessage(textInput)
                                 textInput = ""
+                                onTyping(false)
                                 coroutineScope.launch {
                                     if (messages.isNotEmpty()) {
                                         listState.animateScrollToItem(messages.size - 1)
