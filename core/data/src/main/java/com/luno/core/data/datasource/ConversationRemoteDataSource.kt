@@ -125,6 +125,32 @@ class ConversationRemoteDataSource(
         return newConvId
     }
 
+    suspend fun createGroupConversation(title: String, memberIds: List<String>): String {
+        val newConvId = UUID.randomUUID().toString()
+        supabaseClient.postgrest["conversations"]
+            .insert(
+                JsonObject(
+                    mapOf(
+                        "id" to JsonPrimitive(newConvId),
+                        "type" to JsonPrimitive("group"),
+                        "title" to JsonPrimitive(title)
+                    )
+                )
+            )
+
+        val memberList = memberIds.map { memberId ->
+            JsonObject(
+                mapOf(
+                    "conversation_id" to JsonPrimitive(newConvId),
+                    "user_id" to JsonPrimitive(memberId)
+                )
+            )
+        }
+        supabaseClient.postgrest["conversation_members"].insert(memberList)
+
+        return newConvId
+    }
+
     suspend fun fetchMessages(convId: String, limit: Long = 20): List<MessageDto> {
         val list = supabaseClient.postgrest["messages"]
             .select {

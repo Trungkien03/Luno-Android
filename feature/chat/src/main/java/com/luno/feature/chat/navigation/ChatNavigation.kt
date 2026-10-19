@@ -6,6 +6,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import androidx.navigation.navDeepLink
 import androidx.navigation.toRoute
 import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.Message
@@ -76,7 +77,11 @@ fun NavGraphBuilder.chatGraph(
         )
     }
 
-    composable<ChatDetailRoute> { backStackEntry ->
+    composable<ChatDetailRoute>(
+        deepLinks = listOf(
+            navDeepLink { uriPattern = "luno://chat/{conversationId}" }
+        )
+    ) { backStackEntry ->
         val args = backStackEntry.toRoute<ChatDetailRoute>()
 
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

@@ -2,17 +2,26 @@ package com.luno.core.data.repository
 
 import com.luno.core.data.mapper.UserMapper
 import com.luno.core.data.model.UserDto
+import com.luno.core.domain.model.FriendRequest
 import com.luno.core.domain.model.User
 import com.luno.core.domain.repository.UserRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 class UserRepositoryImpl(
     private val supabaseClient: SupabaseClient
 ) : UserRepository {
 
-    override suspend fun findUserById(userId: String): Result<User?> {
+    private val _friendsFlow = MutableStateFlow<List<User>>(emptyList())
+    private val _pendingRequestsFlow = MutableStateFlow<List<FriendRequest>>(emptyList())
+
+    override suspend fun findUserById(userId: String): Result<User> {
         return try {
             val userDto = supabaseClient.postgrest["users"]
                 .select {
@@ -22,6 +31,7 @@ class UserRepositoryImpl(
                 }
                 .decodeSingleOrNull<UserDto>()
             val user = userDto?.let { UserMapper.mapToDomain(it) }
+                ?: User(id = userId, name = "Người dùng", avatarUrl = "")
             Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
@@ -45,5 +55,62 @@ class UserRepositoryImpl(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    override suspend fun sendFriendRequest(receiverId: String): Result<Unit> {
+        return try {
+            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+                ?: return Result.failure(Exception("Not logged in"))
+
+            supabaseClient.postgrest["friend_requests"].insert(
+                JsonObject(
+                    mapOf(
+                        "sender_id" to JsonPrimitive(currentUserId),
+                        "receiver_id" to JsonPrimitive(receiverId),
+                        "status" to JsonPrimitive("PENDING")
+                    )
+                )
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun acceptFriendRequest(requestId: String): Result<Unit> {
+        return try {
+            supabaseClient.postgrest["friend_requests"].update(
+                JsonObject(mapOf("status" to JsonPrimitive("ACCEPTED")))
+            ) {
+                filter { eq("id", requestId) }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun rejectFriendRequest(requestId: String): Result<Unit> {
+        return try {
+            supabaseClient.postgrest["friend_requests"].update(
+                JsonObject(mapOf("status" to JsonPrimitive("REJECTED")))
+            ) {
+                filter { eq("id", requestId) }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override fun getFriendsList(): Flow<List<User>> {
+        return _friendsFlow.asStateFlow()
+    }
+
+    override fun getPendingFriendRequests(): Flow<List<FriendRequest>> {
+        return _pendingRequestsFlow.asStateFlow()
     }
 }

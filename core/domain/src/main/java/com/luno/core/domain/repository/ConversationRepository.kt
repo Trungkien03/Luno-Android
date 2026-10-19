@@ -9,6 +9,7 @@ interface ConversationRepository {
     val conversationsFlow: Flow<List<Conversation>>
     suspend fun fetchConversations()
     suspend fun startConversation(recipientId: String): Result<String>
+    suspend fun createGroupConversation(title: String, memberIds: List<String>): Result<String>
     suspend fun getConversationDetails(convId: String): Conversation?
     fun getMessagesForConversation(convId: String): Flow<List<Message>>
     suspend fun loadOlderMessages(convId: String)

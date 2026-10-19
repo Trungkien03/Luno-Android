@@ -315,6 +315,44 @@ class ConversationRepositoryImpl(
         }
     }
 
+    override suspend fun createGroupConversation(
+        title: String,
+        memberIds: List<String>
+    ): Result<String> {
+        return try {
+            val currentUserId = remoteDataSource.getCurrentUserId()
+                ?: return Result.failure(Exception("Not logged in"))
+
+            val allMembers = (memberIds + currentUserId).distinct()
+            val newConvId = remoteDataSource.createGroupConversation(title, allMembers)
+
+            val newConversation = Conversation(
+                id = newConvId,
+                recipient = User(id = "", name = title.ifBlank { "Nhóm mới" }, avatarUrl = ""),
+                lastMessage = Message(
+                    id = "m_default",
+                    senderId = "",
+                    text = "Nhóm đã được tạo",
+                    timestamp = System.currentTimeMillis(),
+                    isRead = true,
+                    status = MessageStatus.SENT
+                ),
+                unreadCount = 0,
+                isPinned = false
+            )
+
+            val currentList = _conversationsFlow.value.toMutableList()
+            currentList.add(0, newConversation)
+            _conversationsFlow.value = currentList
+            conversationDao?.upsertConversation(newConversation.toEntity())
+
+            Result.success(newConvId)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
     override suspend fun getConversationDetails(convId: String): Conversation? {
         getConversation(convId)?.let { return it }
         val dbConv = conversationDao?.getConversationById(convId)
