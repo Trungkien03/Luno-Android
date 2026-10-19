@@ -11,10 +11,12 @@ import com.luno.core.data.local.userDataStore
 import com.luno.core.data.repository.AuthRepositoryImpl
 import com.luno.core.data.repository.ConversationRepositoryImpl
 import com.luno.core.data.repository.MediaRepositoryImpl
+import com.luno.core.data.repository.PostRepositoryImpl
 import com.luno.core.data.repository.UserRepositoryImpl
 import com.luno.core.domain.repository.AuthRepository
 import com.luno.core.domain.repository.ConversationRepository
 import com.luno.core.domain.repository.MediaRepository
+import com.luno.core.domain.repository.PostRepository
 import com.luno.core.domain.repository.UserRepository
 import com.luno.core.network.di.SupabaseModule
 
@@ -47,6 +49,10 @@ object AppModule {
 
     val mediaRepository: MediaRepository by lazy {
         MediaRepositoryImpl(MediaRemoteDataSource(SupabaseModule.client))
+    }
+
+    val postRepository: PostRepository by lazy {
+        PostRepositoryImpl(SupabaseModule.client)
     }
 
     val conversationRepository: ConversationRepository by lazy {

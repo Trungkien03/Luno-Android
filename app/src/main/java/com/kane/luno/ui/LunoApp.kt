@@ -44,8 +44,10 @@ import com.luno.feature.chat.navigation.ChatsRoute
 import com.luno.feature.chat.navigation.SearchRoute
 import com.luno.feature.chat.navigation.chatGraph
 import com.luno.feature.chat.ui.ContactsScreen
+import com.luno.feature.chat.ui.DiscoverScreen
 import com.luno.feature.chat.viewmodels.ChatViewModel
 import com.luno.feature.chat.viewmodels.ContactsViewModel
+import com.luno.feature.chat.viewmodels.DiscoverViewModel
 import com.luno.feature.chat.viewmodels.SearchViewModel
 import com.luno.feature.profile.ProfileViewModel
 import com.luno.feature.profile.navigation.EditProfileRoute
@@ -97,6 +99,14 @@ fun LunoApp(
                     AppModule.userRepository,
                     AppModule.conversationRepository
                 ) as T
+            }
+        }
+    ),
+    discoverViewModel: DiscoverViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return DiscoverViewModel(AppModule.postRepository) as T
             }
         }
     )
@@ -158,6 +168,7 @@ fun LunoApp(
                 chatViewModel = chatViewModel,
                 searchViewModel = searchViewModel,
                 contactsViewModel = contactsViewModel,
+                discoverViewModel = discoverViewModel,
                 profileViewModel = profileViewModel,
                 onNavigateToDetail = { convId ->
                     navController.navigate(ChatDetailRoute(convId))
@@ -209,6 +220,7 @@ fun MainTabScreen(
     chatViewModel: ChatViewModel,
     searchViewModel: SearchViewModel,
     contactsViewModel: ContactsViewModel,
+    discoverViewModel: DiscoverViewModel,
     profileViewModel: ProfileViewModel,
     onNavigateToDetail: (String) -> Unit,
     onNavigateToEditProfile: () -> Unit,
@@ -313,7 +325,33 @@ fun MainTabScreen(
                 )
             }
 
-            composable("Discover") { PlaceholderScreen("Khám phá") }
+            composable("Discover") {
+                val feedPosts by discoverViewModel.feedPosts.collectAsStateWithLifecycle()
+                val isLoading by discoverViewModel.isLoading.collectAsStateWithLifecycle()
+                val isCreatingPost by discoverViewModel.isCreatingPost.collectAsStateWithLifecycle()
+                val selectedPostForComments by discoverViewModel.selectedPostForComments.collectAsStateWithLifecycle()
+                val commentsList by discoverViewModel.commentsForSelectedPost.collectAsStateWithLifecycle()
+                val userAvatarUrl by profileViewModel.userImg.collectAsStateWithLifecycle()
+
+                DiscoverScreen(
+                    feedPosts = feedPosts,
+                    isLoading = isLoading,
+                    isCreatingPost = isCreatingPost,
+                    selectedPostForComments = selectedPostForComments,
+                    commentsList = commentsList,
+                    userAvatarUrl = userAvatarUrl.orEmpty(),
+                    onRefresh = { discoverViewModel.refreshFeed() },
+                    onCreatePost = { content, images ->
+                        discoverViewModel.createPost(content, images) {
+                            discoverViewModel.refreshFeed()
+                        }
+                    },
+                    onToggleLike = { postId -> discoverViewModel.toggleLike(postId) },
+                    onOpenComments = { post -> discoverViewModel.openCommentsForPost(post) },
+                    onCloseComments = { discoverViewModel.closeComments() },
+                    onAddComment = { postId, text -> discoverViewModel.addComment(postId, text) }
+                )
+            }
         }
     }
 }
