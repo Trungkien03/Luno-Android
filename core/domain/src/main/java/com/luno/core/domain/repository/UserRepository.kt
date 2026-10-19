@@ -12,4 +12,12 @@ interface UserRepository {
     suspend fun rejectFriendRequest(requestId: String): Result<Unit>
     fun getFriendsList(): Flow<List<User>>
     fun getPendingFriendRequests(): Flow<List<FriendRequest>>
+    suspend fun updateUserProfile(
+        displayName: String,
+        username: String?,
+        bio: String?,
+        avatarUrl: String?,
+        gender: String?,
+        dob: String?
+    ): Result<Unit>
 }

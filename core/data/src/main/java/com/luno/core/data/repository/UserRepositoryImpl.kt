@@ -113,4 +113,35 @@ class UserRepositoryImpl(
     override fun getPendingFriendRequests(): Flow<List<FriendRequest>> {
         return _pendingRequestsFlow.asStateFlow()
     }
+
+    override suspend fun updateUserProfile(
+        displayName: String,
+        username: String?,
+        bio: String?,
+        avatarUrl: String?,
+        gender: String?,
+        dob: String?
+    ): Result<Unit> {
+        return try {
+            val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+                ?: return Result.failure(Exception("Not logged in"))
+
+            val updateMap = mutableMapOf<String, JsonPrimitive>(
+                "display_name" to JsonPrimitive(displayName)
+            )
+            if (!username.isNullOrBlank()) updateMap["username"] = JsonPrimitive(username.trim())
+            if (bio != null) updateMap["bio"] = JsonPrimitive(bio)
+            if (!avatarUrl.isNullOrBlank()) updateMap["avatar_url"] = JsonPrimitive(avatarUrl)
+            if (!gender.isNullOrBlank()) updateMap["gender"] = JsonPrimitive(gender)
+            if (!dob.isNullOrBlank()) updateMap["dob"] = JsonPrimitive(dob)
+
+            supabaseClient.postgrest["users"].update(JsonObject(updateMap)) {
+                filter { eq("id", currentUserId) }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
 }

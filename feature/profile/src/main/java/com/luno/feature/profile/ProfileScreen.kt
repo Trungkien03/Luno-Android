@@ -1,5 +1,6 @@
 package com.luno.feature.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ fun ProfileScreen(
     userImg: String?,
     isSigningOut: Boolean,
     onSignOut: () -> Unit,
+    onNavigateToEditProfile: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -80,8 +82,9 @@ fun ProfileScreen(
             HorizontalDivider()
 
             ListItem(
-                headlineContent = { Text("Thông tin tài khoản") },
+                headlineContent = { Text("Chỉnh sửa thông tin cá nhân") },
                 leadingContent = { Icon(Icons.Filled.Person, contentDescription = null) },
+                modifier = Modifier.clickable { onNavigateToEditProfile() }
             )
             ListItem(
                 headlineContent = { Text("Quyền riêng tư và bảo mật") },

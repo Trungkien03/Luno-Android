@@ -48,6 +48,7 @@ import com.luno.feature.chat.viewmodels.ChatViewModel
 import com.luno.feature.chat.viewmodels.ContactsViewModel
 import com.luno.feature.chat.viewmodels.SearchViewModel
 import com.luno.feature.profile.ProfileViewModel
+import com.luno.feature.profile.navigation.EditProfileRoute
 import com.luno.feature.profile.navigation.ProfileRoute
 import com.luno.feature.profile.navigation.profileGraph
 import kotlinx.serialization.Serializable
@@ -113,7 +114,11 @@ fun LunoApp(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ProfileViewModel(AppModule.authRepository) as T
+                return ProfileViewModel(
+                    AppModule.authRepository,
+                    AppModule.userRepository,
+                    AppModule.mediaRepository
+                ) as T
             }
         }
     )
@@ -157,6 +162,9 @@ fun LunoApp(
                 onNavigateToDetail = { convId ->
                     navController.navigate(ChatDetailRoute(convId))
                 },
+                onNavigateToEditProfile = {
+                    navController.navigate(EditProfileRoute)
+                },
                 onSignedOut = {
                     navController.navigate(LoginRoute) {
                         popUpTo(MainRoute) { inclusive = true }
@@ -178,6 +186,21 @@ fun LunoApp(
                 navController.popBackStack()
             }
         )
+
+        profileGraph(
+            viewModel = profileViewModel,
+            onSignedOut = {
+                navController.navigate(LoginRoute) {
+                    popUpTo(MainRoute) { inclusive = true }
+                }
+            },
+            onNavigateToEditProfile = {
+                navController.navigate(EditProfileRoute)
+            },
+            onBack = {
+                navController.popBackStack()
+            }
+        )
     }
 }
 
@@ -188,6 +211,7 @@ fun MainTabScreen(
     contactsViewModel: ContactsViewModel,
     profileViewModel: ProfileViewModel,
     onNavigateToDetail: (String) -> Unit,
+    onNavigateToEditProfile: () -> Unit,
     onSignedOut: () -> Unit
 ) {
     NotificationPermissionEffect()
@@ -260,7 +284,9 @@ fun MainTabScreen(
 
             profileGraph(
                 viewModel = profileViewModel,
-                onSignedOut = onSignedOut
+                onSignedOut = onSignedOut,
+                onNavigateToEditProfile = onNavigateToEditProfile,
+                onBack = { tabNavController.popBackStack() }
             )
 
             composable("Contacts") {
