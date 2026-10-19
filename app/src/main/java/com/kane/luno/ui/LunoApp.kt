@@ -23,8 +23,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -41,7 +43,9 @@ import com.luno.feature.chat.navigation.ChatDetailRoute
 import com.luno.feature.chat.navigation.ChatsRoute
 import com.luno.feature.chat.navigation.SearchRoute
 import com.luno.feature.chat.navigation.chatGraph
+import com.luno.feature.chat.ui.ContactsScreen
 import com.luno.feature.chat.viewmodels.ChatViewModel
+import com.luno.feature.chat.viewmodels.ContactsViewModel
 import com.luno.feature.chat.viewmodels.SearchViewModel
 import com.luno.feature.profile.ProfileViewModel
 import com.luno.feature.profile.navigation.ProfileRoute
@@ -80,6 +84,17 @@ fun LunoApp(
                 return SearchViewModel(
                     AppModule.conversationRepository,
                     AppModule.userRepository
+                ) as T
+            }
+        }
+    ),
+    contactsViewModel: ContactsViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return ContactsViewModel(
+                    AppModule.userRepository,
+                    AppModule.conversationRepository
                 ) as T
             }
         }
@@ -137,6 +152,7 @@ fun LunoApp(
             MainTabScreen(
                 chatViewModel = chatViewModel,
                 searchViewModel = searchViewModel,
+                contactsViewModel = contactsViewModel,
                 profileViewModel = profileViewModel,
                 onNavigateToDetail = { convId ->
                     navController.navigate(ChatDetailRoute(convId))
@@ -169,6 +185,7 @@ fun LunoApp(
 fun MainTabScreen(
     chatViewModel: ChatViewModel,
     searchViewModel: SearchViewModel,
+    contactsViewModel: ContactsViewModel,
     profileViewModel: ProfileViewModel,
     onNavigateToDetail: (String) -> Unit,
     onSignedOut: () -> Unit
@@ -246,7 +263,30 @@ fun MainTabScreen(
                 onSignedOut = onSignedOut
             )
 
-            composable("Contacts") { PlaceholderScreen("Danh bạ") }
+            composable("Contacts") {
+                val context = LocalContext.current
+                val friendsList by contactsViewModel.friendsList.collectAsStateWithLifecycle()
+                val pendingRequests by contactsViewModel.pendingRequests.collectAsStateWithLifecycle()
+                val deviceContacts by contactsViewModel.deviceContacts.collectAsStateWithLifecycle()
+                val errorMessage by contactsViewModel.errorMessage.collectAsStateWithLifecycle()
+
+                ContactsScreen(
+                    friendsList = friendsList,
+                    pendingRequests = pendingRequests,
+                    deviceContacts = deviceContacts,
+                    errorMessage = errorMessage,
+                    onSyncContacts = { contactsViewModel.syncDeviceContacts(context) },
+                    onAcceptRequest = { reqId -> contactsViewModel.acceptRequest(reqId) },
+                    onRejectRequest = { reqId -> contactsViewModel.rejectRequest(reqId) },
+                    onStartConversation = { userId ->
+                        contactsViewModel.startConversation(userId) { convId ->
+                            onNavigateToDetail(convId)
+                        }
+                    },
+                    onErrorDismiss = { contactsViewModel.clearError() }
+                )
+            }
+
             composable("Discover") { PlaceholderScreen("Khám phá") }
         }
     }

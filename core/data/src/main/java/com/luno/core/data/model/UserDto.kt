@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class UserDto(
     val id: String,
     val email: String? = null,
+    val phone: String? = null,
     @SerialName("display_name")
     val displayName: String? = null,
     val name: String? = null,
@@ -18,5 +19,5 @@ data class UserDto(
     val lastSeenAt: String? = null
 ) {
     val effectiveName: String
-        get() = displayName ?: name ?: email ?: "Người dùng"
+        get() = displayName ?: name ?: email ?: phone ?: "Người dùng"
 }

@@ -10,7 +10,8 @@ data class User(
     val name: String,
     val avatarUrl: String,
     val isOnline: Boolean = false,
-    val lastSeenAt: String? = null
+    val lastSeenAt: String? = null,
+    val phone: String? = null
 ) {
     val isActuallyOnline: Boolean
         get() {

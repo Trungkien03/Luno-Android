@@ -4,9 +4,11 @@ import com.luno.core.data.local.UserPreferencesDataSource
 import com.luno.core.domain.repository.AuthRepository
 import com.luno.core.domain.repository.UserRepository
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.IDToken
+import io.github.jan.supabase.auth.providers.builtin.Phone
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -32,6 +34,33 @@ class AuthRepositoryImpl(
             refreshUserInfo()
             Result.success(Unit)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signInWithPhone(phone: String): Result<Unit> {
+        return try {
+            supabaseClient.auth.signUpWith(Phone) {
+                this.phone = phone
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun verifyPhoneOtp(phone: String, token: String): Result<Unit> {
+        return try {
+            supabaseClient.auth.verifyPhoneOtp(
+                type = OtpType.Phone.SMS,
+                token = token,
+                phone = phone
+            )
+            refreshUserInfo()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
             Result.failure(e)
         }
     }
@@ -70,7 +99,7 @@ class AuthRepositoryImpl(
         return try {
             val user = supabaseClient.auth.currentUserOrNull()
             if (user != null) {
-                val email = user.email ?: ""
+                val email = user.email ?: user.phone ?: ""
                 val id = user.id
                 val authImg = user.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
                     ?: user.userMetadata?.get("picture")?.jsonPrimitive?.content
@@ -80,7 +109,6 @@ class AuthRepositoryImpl(
 
                 userPreferencesDataSource?.saveUserInfo(email, id, finalImg)
 
-                // Update online status in Supabase users table
                 try {
                     val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
                         timeZone = TimeZone.getTimeZone("UTC")
@@ -107,6 +135,7 @@ class AuthRepositoryImpl(
 
     override fun currentUserEmail(): String? {
         return supabaseClient.auth.currentUserOrNull()?.email
+            ?: supabaseClient.auth.currentUserOrNull()?.phone
     }
 
     override fun currentUserImg(): String? {

@@ -10,7 +10,8 @@ object UserMapper {
             name = dto.effectiveName,
             avatarUrl = dto.avatarUrl.orEmpty(),
             isOnline = dto.isOnline ?: false,
-            lastSeenAt = dto.lastSeenAt
+            lastSeenAt = dto.lastSeenAt,
+            phone = dto.phone
         )
     }
 }

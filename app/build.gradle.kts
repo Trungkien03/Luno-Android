@@ -75,6 +75,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:domain"))
     implementation(project(":core:network"))
+    implementation(project(":core:utils"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:profile"))
     implementation(platform(libs.firebase.bom))
