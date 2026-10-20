@@ -1,5 +1,7 @@
 package com.luno.feature.chat.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -31,8 +33,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +59,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -62,13 +67,16 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.kane.luno.utils.AudioRecorder
 import com.kane.luno.utils.DateUtils
 import com.luno.core.domain.model.Conversation
 import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
+import com.luno.feature.chat.ui.components.FullscreenImageViewer
 import com.luno.feature.chat.ui.components.MessageBubble
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -94,8 +102,32 @@ fun ChatDetailScreen(
     val focusManager = LocalFocusManager.current
 
     var textInput by remember { mutableStateOf("") }
+    var isSearchModeActive by remember { mutableStateOf(false) }
+    var inChatSearchQuery by remember { mutableStateOf("") }
+    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
+
+    var isRecordingAudio by remember { mutableStateOf(false) }
+    val audioRecorder = remember { AudioRecorder(context) }
+
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val audioFile = audioRecorder.startRecording()
+            if (audioFile != null) {
+                isRecordingAudio = true
+            }
+        }
+    }
+
+    val displayMessages = if (inChatSearchQuery.isNotBlank()) {
+        messages.filter { it.text.contains(inChatSearchQuery, ignoreCase = true) }
+    } else {
+        messages
+    }
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
@@ -136,68 +168,93 @@ fun ChatDetailScreen(
             })
         },
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        val avatarRequest = remember(conversation) {
-                            ImageRequest.Builder(context)
-                                .data(conversation.recipient.avatarUrl)
-                                .crossfade(true)
-                                .memoryCachePolicy(policy = CachePolicy.ENABLED)
-                                .diskCachePolicy(CachePolicy.ENABLED)
-                                .build()
+            if (isSearchModeActive) {
+                TopAppBar(
+                    title = {
+                        OutlinedTextField(
+                            value = inChatSearchQuery,
+                            onValueChange = { inChatSearchQuery = it },
+                            placeholder = { Text("Tìm trong trò chuyện...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            isSearchModeActive = false
+                            inChatSearchQuery = ""
+                        }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Đóng tìm kiếm")
                         }
-                        Box(modifier = Modifier.size(38.dp)) {
-                            AsyncImage(
-                                model = avatarRequest,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                            )
-                            if (conversation.recipient.isActuallyOnline) {
-                                Box(
+                    }
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val avatarRequest = remember(conversation) {
+                                ImageRequest.Builder(context)
+                                    .data(conversation.recipient.avatarUrl)
+                                    .crossfade(true)
+                                    .memoryCachePolicy(policy = CachePolicy.ENABLED)
+                                    .diskCachePolicy(CachePolicy.ENABLED)
+                                    .build()
+                            }
+                            Box(modifier = Modifier.size(38.dp)) {
+                                AsyncImage(
+                                    model = avatarRequest,
+                                    contentDescription = null,
                                     modifier = Modifier
-                                        .size(10.dp)
-                                        .background(MaterialTheme.colorScheme.tertiary, CircleShape)
-                                        .align(Alignment.BottomEnd)
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                )
+                                if (conversation.recipient.isActuallyOnline) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.tertiary,
+                                                CircleShape
+                                            )
+                                            .align(Alignment.BottomEnd)
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = conversation.recipient.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = if (isRecipientTyping) "Đang soạn tin..." else conversation.recipient.lastSeenFormatted,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isRecipientTyping) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontStyle = if (isRecipientTyping) FontStyle.Italic else FontStyle.Normal
                                 )
                             }
                         }
-                        Column {
-                            Text(
-                                text = conversation.recipient.name,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                text = if (isRecipientTyping) "Đang soạn tin..." else conversation.recipient.lastSeenFormatted,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isRecipientTyping) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontStyle = if (isRecipientTyping) FontStyle.Italic else FontStyle.Normal
-                            )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở về")
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở về")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Phone, contentDescription = "Gọi điện")
-                    }
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Videocam, contentDescription = "Video call")
-                    }
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
-                    }
-                },
-            )
+                    },
+                    actions = {
+                        IconButton(onClick = { isSearchModeActive = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Tìm trong chat")
+                        }
+                        IconButton(onClick = { }) {
+                            Icon(Icons.Default.Phone, contentDescription = "Gọi điện")
+                        }
+                        IconButton(onClick = { }) {
+                            Icon(Icons.Default.Videocam, contentDescription = "Video call")
+                        }
+                    },
+                )
+            }
         },
         bottomBar = {
             Column {
@@ -269,13 +326,45 @@ fun ChatDetailScreen(
                             Icon(Icons.Default.AttachFile, contentDescription = "Tệp")
                         }
 
+                        IconButton(onClick = {
+                            if (isRecordingAudio) {
+                                val audioFile = audioRecorder.stopRecording()
+                                isRecordingAudio = false
+                                if (audioFile != null && audioFile.exists()) {
+                                    val bytes = audioFile.readBytes()
+                                    val fileName = "voice_${System.currentTimeMillis()}.m4a"
+                                    onSendMedia(bytes, fileName, MediaType.AUDIO)
+                                }
+                            } else {
+                                val isGranted = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+
+                                if (isGranted) {
+                                    val audioFile = audioRecorder.startRecording()
+                                    if (audioFile != null) {
+                                        isRecordingAudio = true
+                                    }
+                                } else {
+                                    recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (isRecordingAudio) Icons.Default.MicOff else Icons.Default.Mic,
+                                contentDescription = "Micro",
+                                tint = if (isRecordingAudio) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         OutlinedTextField(
                             value = textInput,
                             onValueChange = { newValue ->
                                 textInput = newValue
                                 onTyping(newValue.isNotBlank())
                             },
-                            placeholder = { Text("Tin nhắn") },
+                            placeholder = { Text(if (isRecordingAudio) "Đang ghi âm..." else "Tin nhắn") },
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 40.dp),
@@ -312,7 +401,7 @@ fun ChatDetailScreen(
         },
     ) { paddingValues ->
         val layoutDirection = LocalLayoutDirection.current
-        if (messages.isEmpty()) {
+        if (displayMessages.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -355,9 +444,9 @@ fun ChatDetailScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                for (i in messages.indices) {
-                    val message = messages[i]
-                    val prevMessage = if (i > 0) messages[i - 1] else null
+                for (i in displayMessages.indices) {
+                    val message = displayMessages[i]
+                    val prevMessage = if (i > 0) displayMessages[i - 1] else null
                     val showDateHeader = prevMessage == null || !DateUtils.isSameDay(
                         prevMessage.timestamp,
                         message.timestamp
@@ -396,11 +485,19 @@ fun ChatDetailScreen(
                             isMe = isMe,
                             recipientAvatarUrl = conversation.recipient.avatarUrl,
                             onReplyMessage = onReplyMessage,
-                            onDeleteMessage = onUnsendMessage
+                            onDeleteMessage = onUnsendMessage,
+                            onImageClick = { url -> fullscreenImageUrl = url }
                         )
                     }
                 }
             }
+        }
+
+        if (fullscreenImageUrl != null) {
+            FullscreenImageViewer(
+                imageUrlList = listOf(fullscreenImageUrl!!),
+                onDismiss = { fullscreenImageUrl = null }
+            )
         }
     }
 }

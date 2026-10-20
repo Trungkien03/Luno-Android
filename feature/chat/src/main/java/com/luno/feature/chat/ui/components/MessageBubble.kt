@@ -23,9 +23,11 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +57,7 @@ import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.kane.luno.utils.AudioPlayer
 import com.kane.luno.utils.DateUtils
 import com.luno.core.domain.model.MediaType
 import com.luno.core.domain.model.Message
@@ -66,11 +69,13 @@ fun MessageBubble(
     isMe: Boolean,
     recipientAvatarUrl: String,
     onReplyMessage: (Message) -> Unit = {},
-    onDeleteMessage: (Message) -> Unit = {}
+    onDeleteMessage: (Message) -> Unit = {},
+    onImageClick: (String) -> Unit = {}
 ) {
-
     val context = LocalContext.current
     var isHovered by remember { mutableStateOf(false) }
+    var isAudioPlaying by remember { mutableStateOf(false) }
+    val audioPlayer = remember { AudioPlayer(context) }
     val clipboardManager = LocalClipboardManager.current
     val avatarRequest = remember(recipientAvatarUrl) {
         ImageRequest.Builder(context)
@@ -197,14 +202,16 @@ fun MessageBubble(
 
                     when (message.mediaType) {
                         MediaType.IMAGE -> {
-                            if (!message.mediaUrl.isNullOrBlank()) {
+                            val mediaUrl = message.mediaUrl
+                            if (!mediaUrl.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = message.mediaUrl,
+                                    model = mediaUrl,
                                     contentDescription = "Hình ảnh",
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(max = 200.dp)
                                         .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onImageClick(mediaUrl) }
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                             }
@@ -218,17 +225,34 @@ fun MessageBubble(
                         }
 
                         MediaType.AUDIO -> {
+                            val audioUrl = message.mediaUrl.orEmpty()
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Ghi âm",
-                                    tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
-                                )
+                                IconButton(
+                                    onClick = {
+                                        if (isAudioPlaying) {
+                                            audioPlayer.stop()
+                                            isAudioPlaying = false
+                                        } else if (audioUrl.isNotBlank()) {
+                                            audioPlayer.play(audioUrl) {
+                                                isAudioPlaying = false
+                                            }
+                                            isAudioPlaying = true
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = "Ghi âm",
+                                        tint = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 Text(
-                                    text = "Ghi âm " + (message.fileSize ?: ""),
+                                    text = if (isAudioPlaying) "Đang phát..." else "Ghi âm " + (message.fileSize
+                                        ?: ""),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (isMe) Color(0xFF0D47A1) else MaterialTheme.colorScheme.onSurface
                                 )
