@@ -12,6 +12,7 @@ interface ConversationRepository {
     suspend fun createGroupConversation(title: String, memberIds: List<String>): Result<String>
     suspend fun getConversationDetails(convId: String): Conversation?
     fun getMessagesForConversation(convId: String): Flow<List<Message>>
+    suspend fun markConversationAsRead(convId: String)
     suspend fun loadOlderMessages(convId: String)
     fun getTypingStatus(convId: String): Flow<Boolean>
     suspend fun sendTypingStatus(convId: String, isTyping: Boolean)

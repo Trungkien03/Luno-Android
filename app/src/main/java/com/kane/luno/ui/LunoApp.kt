@@ -1,10 +1,10 @@
 package com.kane.luno.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CompassCalibration
@@ -12,7 +12,6 @@ import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -20,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,6 +36,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kane.luno.di.AppModule
 import com.kane.luno.ui.permission.NotificationPermissionEffect
+import com.kane.luno.utils.NetworkMonitor
 import com.luno.core.auth.navigation.LoginRoute
 import com.luno.core.auth.navigation.authGraph
 import com.luno.core.auth.ui.AuthViewModel
@@ -45,6 +46,7 @@ import com.luno.feature.chat.navigation.SearchRoute
 import com.luno.feature.chat.navigation.chatGraph
 import com.luno.feature.chat.ui.ContactsScreen
 import com.luno.feature.chat.ui.DiscoverScreen
+import com.luno.feature.chat.ui.components.OfflineBanner
 import com.luno.feature.chat.viewmodels.ChatViewModel
 import com.luno.feature.chat.viewmodels.ContactsViewModel
 import com.luno.feature.chat.viewmodels.DiscoverViewModel
@@ -111,6 +113,10 @@ fun LunoApp(
         }
     )
 ) {
+    val context = LocalContext.current
+    val networkMonitor = remember { NetworkMonitor(context) }
+    val isOnline by networkMonitor.isOnline.collectAsStateWithLifecycle(initialValue = true)
+
     val authViewModel: AuthViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -149,69 +155,73 @@ fun LunoApp(
     val startDestination = if (userEmail != null) MainRoute else LoginRoute
     val navController = rememberNavController()
 
-    NavHost(
-        navController = navController,
-        startDestination = startDestination,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        authGraph(
-            authViewModel = authViewModel,
-            onLoginSuccess = {
-                navController.navigate(MainRoute) {
-                    popUpTo(LoginRoute) { inclusive = true }
-                }
-            }
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+        OfflineBanner(isOnline = isOnline)
 
-        composable<MainRoute> {
-            MainTabScreen(
-                chatViewModel = chatViewModel,
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = Modifier.weight(1f)
+        ) {
+            authGraph(
+                authViewModel = authViewModel,
+                onLoginSuccess = {
+                    navController.navigate(MainRoute) {
+                        popUpTo(LoginRoute) { inclusive = true }
+                    }
+                }
+            )
+
+            composable<MainRoute> {
+                MainTabScreen(
+                    chatViewModel = chatViewModel,
+                    searchViewModel = searchViewModel,
+                    contactsViewModel = contactsViewModel,
+                    discoverViewModel = discoverViewModel,
+                    profileViewModel = profileViewModel,
+                    onNavigateToDetail = { convId ->
+                        navController.navigate(ChatDetailRoute(convId))
+                    },
+                    onNavigateToEditProfile = {
+                        navController.navigate(EditProfileRoute)
+                    },
+                    onSignedOut = {
+                        navController.navigate(LoginRoute) {
+                            popUpTo(MainRoute) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            chatGraph(
+                viewModel = chatViewModel,
                 searchViewModel = searchViewModel,
-                contactsViewModel = contactsViewModel,
-                discoverViewModel = discoverViewModel,
-                profileViewModel = profileViewModel,
                 onNavigateToDetail = { convId ->
                     navController.navigate(ChatDetailRoute(convId))
                 },
-                onNavigateToEditProfile = {
-                    navController.navigate(EditProfileRoute)
+                onNavigateToSearch = {
+                    navController.navigate(SearchRoute)
                 },
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+
+            profileGraph(
+                viewModel = profileViewModel,
                 onSignedOut = {
                     navController.navigate(LoginRoute) {
                         popUpTo(MainRoute) { inclusive = true }
                     }
+                },
+                onNavigateToEditProfile = {
+                    navController.navigate(EditProfileRoute)
+                },
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
-
-        chatGraph(
-            viewModel = chatViewModel,
-            searchViewModel = searchViewModel,
-            onNavigateToDetail = { convId ->
-                navController.navigate(ChatDetailRoute(convId))
-            },
-            onNavigateToSearch = {
-                navController.navigate(SearchRoute)
-            },
-            onBack = {
-                navController.popBackStack()
-            }
-        )
-
-        profileGraph(
-            viewModel = profileViewModel,
-            onSignedOut = {
-                navController.navigate(LoginRoute) {
-                    popUpTo(MainRoute) { inclusive = true }
-                }
-            },
-            onNavigateToEditProfile = {
-                navController.navigate(EditProfileRoute)
-            },
-            onBack = {
-                navController.popBackStack()
-            }
-        )
     }
 }
 
@@ -353,17 +363,5 @@ fun MainTabScreen(
                 )
             }
         }
-    }
-}
-
-@Composable
-fun PlaceholderScreen(title: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
     }
 }

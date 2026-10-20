@@ -92,6 +92,16 @@ class ConversationRepositoryImpl(
         }
     }
 
+    override suspend fun markConversationAsRead(convId: String) {
+        try {
+            val currentUserId = remoteDataSource.getCurrentUserId() ?: return
+            messageDao?.markMessagesAsRead(convId)
+            remoteDataSource.markMessagesAsReadRecord(convId, currentUserId)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override suspend fun loadOlderMessages(convId: String) {
         try {
             val currentMessages = _messagesFlowMap[convId]?.value

@@ -178,6 +178,17 @@ class ConversationRemoteDataSource(
         return list.reversed()
     }
 
+    suspend fun markMessagesAsReadRecord(convId: String, currentUserId: String) {
+        supabaseClient.postgrest["messages"]
+            .update(JsonObject(mapOf("is_read" to JsonPrimitive(true)))) {
+                filter {
+                    eq("conversation_id", convId)
+                    neq("sender_id", currentUserId)
+                    eq("is_read", false)
+                }
+            }
+    }
+
     suspend fun sendMessageRecord(
         convId: String,
         senderId: String,

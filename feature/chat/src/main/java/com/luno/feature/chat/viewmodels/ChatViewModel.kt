@@ -133,6 +133,7 @@ class ChatViewModel(
         if (convId != null) {
             messagesJob = viewModelScope.launch {
                 conversationRepository.getConversationDetails(convId)
+                conversationRepository.markConversationAsRead(convId)
 
                 launch {
                     conversationRepository.getTypingStatus(convId).collect { typing ->
