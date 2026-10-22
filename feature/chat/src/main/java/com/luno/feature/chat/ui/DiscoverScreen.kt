@@ -48,6 +48,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -330,7 +331,7 @@ fun CreatePostDialog(
 ) {
     val context = LocalContext.current
     var contentText by remember { mutableStateOf("") }
-    val attachedImages = remember { mutableListOf<Pair<ByteArray, String>>() }
+    val attachedImages = remember { mutableStateListOf<Pair<ByteArray, String>>() }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()

@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 class PostRepositoryImpl(
     private val supabaseClient: SupabaseClient,
@@ -95,6 +96,13 @@ class PostRepositoryImpl(
             val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
                 ?: return Result.failure(Exception("Not logged in"))
 
+            val userDto = supabaseClient.postgrest["users"]
+                .select { filter { eq("id", currentUserId) } }
+                .decodeSingleOrNull<UserDto>()
+
+            val currentUser = userDto?.let { UserMapper.mapToDomain(it) }
+                ?: User(id = currentUserId, name = "Bạn", avatarUrl = "")
+
             val uploadedUrls = mutableListOf<String>()
             for ((bytes, fileName) in imageBytesList) {
                 val url = mediaRemoteDataSource.uploadFile(bytes, fileName, "chat-images")
@@ -102,6 +110,20 @@ class PostRepositoryImpl(
                     uploadedUrls.add(url)
                 }
             }
+
+            val optimisticPost = Post(
+                id = UUID.randomUUID().toString(),
+                author = currentUser,
+                content = content,
+                mediaUrls = uploadedUrls,
+                timestamp = System.currentTimeMillis(),
+                likeCount = 0,
+                commentCount = 0,
+                isLiked = false
+            )
+
+            // Optimistically update UI feed immediately
+            _feedPostsFlow.value = listOf(optimisticPost) + _feedPostsFlow.value
 
             val mediaJsonArray = JsonArray(uploadedUrls.map { JsonPrimitive(it) })
             supabaseClient.postgrest["posts"].insert(
